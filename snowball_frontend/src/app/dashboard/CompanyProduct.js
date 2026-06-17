@@ -322,8 +322,8 @@ export default function CompanyProductManagement() {
         const hasMultipleEntries = entries.length > 1 || (entries.length === 1 && entries[0].icecreamname);
 
         return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-[95%] max-h-[90vh] overflow-hidden">
                     {/* Modal Header */}
                     <div className={`px-6 py-4 flex justify-between items-center ${
                         isAddMode && hasMultipleEntries
@@ -643,7 +643,6 @@ export default function CompanyProductManagement() {
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S.No</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product ID</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ice Cream</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
@@ -662,8 +661,7 @@ export default function CompanyProductManagement() {
                                 return (
                                     <tr key={product.companyproductid} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">#{product.companyproductid}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.entry_date || '-'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.entry_date.split('T')[0] || '-'}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.icecreamname}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             <span className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-full">

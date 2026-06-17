@@ -25,6 +25,8 @@ app.use('/employee', require('./routes/employee'));
 app.use('/product', require('./routes/product'));
 app.use('/debt', require('./routes/debt'));
 app.use('/companyproduct', require('./routes/companyproduct'));
+app.use('/attendance', require('./routes/attendance'));
+app.use('/handedgoods', require('./routes/handedgoods'));
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

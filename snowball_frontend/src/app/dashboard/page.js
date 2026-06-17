@@ -4,6 +4,8 @@ import DebtManagement from './DebtManagement';
 import SalesmanDetails from './SalesmanDetail';
 import ProductManagement from './ProductManagement';
 import CompanyProductManagement from './CompanyProduct';
+import AttendanceManagement from './AttendanceManagement';
+import HandedGoodsManagement from './HandedGoods';
 
 export default function Dashboard() {
     const [activeTab, setActiveTab] = useState('home');
@@ -198,77 +200,11 @@ export default function Dashboard() {
                 return <CompanyProductManagement />;
 
             case 'attendance':
-                return (
-                    <div>
-                        <div className="mb-8">
-                            <h2 className="text-2xl font-semibold text-gray-900">Salesman Attendance Tracker</h2>
-                            <p className="text-sm text-gray-500 mt-1">Track daily attendance of all salesmen</p>
-                        </div>
-                        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {attendanceData.map((item) => (
-                                            <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.id}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.date}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${item.status === 'Present' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                        {item.status}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                );
+                return <AttendanceManagement />;
+
             case 'handed-goods':
-                return (
-                    <div>
-                        <div className="mb-8">
-                            <h2 className="text-2xl font-semibold text-gray-900">Handed Goods to Salesman</h2>
-                            <p className="text-sm text-gray-500 mt-1">Track products distributed to salesmen</p>
-                        </div>
-                        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {handedGoodsData.map((item) => (
-                                            <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.id}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.salesman}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.product}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.quantity}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.date}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                );
+                return <HandedGoodsManagement />;
+                
             case 'total-sales':
                 return (
                     <div>
@@ -403,12 +339,12 @@ export default function Dashboard() {
         { id: 'salesman-details', label: 'Salesman Details', icon: '👤' },
         { id: 'attendance', label: 'Attendance Tracker', icon: '📋' },
         { id: 'company-products', label: 'Company Products', icon: '🏭' },
+        { id: 'products', label: 'Products', icon: '📦' },
+        { id: 'debts', label: 'Debt Management', icon: '💰' },
         { id: 'handed-goods', label: 'Handed Goods', icon: '📦' },
         { id: 'total-sales', label: 'Total Sales', icon: '💰' },
         { id: 'transported-goods', label: 'Transported Goods', icon: '🚚' },
         { id: 'bought-products', label: 'Bought Products', icon: '🛒' },
-        { id: 'products', label: 'Products', icon: '📦' },
-        { id: 'debts', label: 'Debt Management', icon: '💰' },
     ];
 
     return (
