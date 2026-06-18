@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { postData } from '@/Services';
 
 // ---------- helpers ----------
@@ -38,6 +38,7 @@ function newCard(serial) {
         salesmanid: '',
         salesmanName: '',
         salesmanLocked: false,
+        batteries: [],
         rows: [emptyRow()],
         returnExpr: '',
         commission: '',
@@ -45,6 +46,7 @@ function newCard(serial) {
         saved: false,
         editMode: false,
         handedgoodsid: null,
+        isUpdateMode: false,
     };
 }
 
@@ -62,8 +64,9 @@ export default function HandedGoodsManagement() {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [salesmen, setSalesmen] = useState([]);
     const [products, setProducts] = useState([]);
+    const [batteryOptions, setBatteryOptions] = useState([]);
     const [cards, setCards] = useState([newCard(1)]);
-    const [editCards, setEditCards] = useState([]); // Separate state for edit cards
+    const [editCards, setEditCards] = useState([]);
     const [loadingLookups, setLoadingLookups] = useState(false);
     const [showRecords, setShowRecords] = useState(false);
     const [records, setRecords] = useState([]);
@@ -71,13 +74,15 @@ export default function HandedGoodsManagement() {
     const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
     const [filterYear, setFilterYear] = useState(new Date().getFullYear());
     const [loadingRecords, setLoadingRecords] = useState(false);
+    const [assignedBatteries, setAssignedBatteries] = useState([]);
 
     // ---------- lookups ----------
 
     const fetchSalesmen = async () => {
         try {
-            const result = await postData('employee/retrieve-salesman', {});
+            const result = await postData('employee/retrieve-salesmen-without-attendance', { date });
             if (result && result.status) {
+                // Preserve current selections by keeping the old salesman data
                 setSalesmen(result.data || []);
             }
         } catch (error) {
@@ -96,14 +101,53 @@ export default function HandedGoodsManagement() {
         }
     };
 
-    useEffect(() => {
-        const loadLookups = async () => {
-            setLoadingLookups(true);
-            await Promise.all([fetchSalesmen(), fetchProducts()]);
+    const fetchBatteries = async () => {
+        try {
+            const result = await postData('battery/retrieve-batteries', {});
+            if (result && result.status) {
+                const batteryNames = result.data.map(b => b.batteryname);
+                setBatteryOptions(batteryNames);
+            }
+        } catch (error) {
+            console.error('Error fetching batteries:', error);
+        }
+    };
+
+    const fetchAssignedBatteries = async () => {
+        try {
+            const result = await postData('handedgoods/retrieve-handed-goods', {});
+            if (result && result.status) {
+                const assigned = [];
+                result.data.forEach(record => {
+                    if (record.details) {
+                        const details = typeof record.details === 'string' ? JSON.parse(record.details) : record.details;
+                        if (details.batteries && Array.isArray(details.batteries)) {
+                            assigned.push(...details.batteries);
+                        }
+                    }
+                });
+                setAssignedBatteries(assigned);
+            }
+        } catch (error) {
+            console.error('Error fetching assigned batteries:', error);
+        }
+    };
+
+    // ---------- Fetch all lookups ----------
+    const fetchAllLookups = async () => {
+        setLoadingLookups(true);
+        try {
+            await Promise.all([fetchSalesmen(), fetchProducts(), fetchBatteries(), fetchAssignedBatteries()]);
+        } catch (error) {
+            console.error('Error fetching lookups:', error);
+        } finally {
             setLoadingLookups(false);
-        };
-        loadLookups();
-    }, []);
+        }
+    };
+
+    useEffect(() => {
+        fetchAllLookups();
+    }, [date]);
 
     // ---------- Fetch Records ----------
 
@@ -116,7 +160,7 @@ export default function HandedGoodsManagement() {
             } else {
                 payload = { month: filterMonth, year: filterYear };
             }
-            
+
             const result = await postData('handedgoods/retrieve-handed-goods', payload);
             if (result && result.status) {
                 const parsedRecords = result.data.map(record => ({
@@ -132,26 +176,36 @@ export default function HandedGoodsManagement() {
         }
     };
 
+    useEffect(() => {
+        if (showRecords) {
+            fetchRecords();
+        }
+    }, [filterType, date, filterMonth, filterYear]);
+
     // ---------- Edit Record ----------
     const handleEditRecord = (record) => {
-        const newCardData = newCard(editCards.length + 1);
+        setEditCards([]);
+
+        const newCardData = newCard(1);
         newCardData.salesmanid = record.salesmanid;
         newCardData.salesmanName = record.salesman_name;
         newCardData.salesmanLocked = true;
-        newCardData.rows = record.details.map(item => ({
+        newCardData.batteries = record.details?.batteries || [];
+        newCardData.rows = record.details?.items?.map(item => ({
             rowid: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             productid: item.productid || '',
             productname: item.productname || '',
             qty: item.qty || '',
             price: item.price || '',
-        }));
+        })) || [emptyRow()];
         newCardData.returnExpr = String(record.returnamt || '');
         newCardData.commission = String(record.commission || '');
         newCardData.editMode = true;
         newCardData.handedgoodsid = record.handedgoodsid;
         newCardData.saved = false;
-        
-        setEditCards([...editCards, newCardData]);
+        newCardData.isUpdateMode = true;
+
+        setEditCards([newCardData]);
         setShowRecords(false);
     };
 
@@ -159,12 +213,14 @@ export default function HandedGoodsManagement() {
 
     const handleDeleteRecord = async (handedgoodsid) => {
         if (!confirm('Are you sure you want to delete this record?')) return;
-        
+
         try {
             const result = await postData('handedgoods/delete-handed-goods', { handedgoodsid });
             if (result && result.status) {
                 alert('Record deleted successfully!');
-                fetchRecords();
+                await fetchRecords();
+                await fetchAssignedBatteries();
+                // Don't refetch salesmen here to preserve selections
             } else {
                 alert(result?.message || 'Failed to delete');
             }
@@ -176,7 +232,6 @@ export default function HandedGoodsManagement() {
 
     // ---------- card-level mutators ----------
 
-    // Update card (for both cards and editCards)
     const updateCard = (cardid, patch, isEdit = false) => {
         const setter = isEdit ? setEditCards : setCards;
         setter((prev) =>
@@ -202,6 +257,18 @@ export default function HandedGoodsManagement() {
         const salesman = salesmen.find(
             (s) => String(s.salesmanid) === String(salesmanid)
         );
+
+        // If salesman not found and salesmanid is not empty, clear the selection
+        if (!salesman && salesmanid) {
+            alert('Selected salesman is no longer available. Please select another.');
+            updateCard(cardid, {
+                salesmanid: '',
+                salesmanName: '',
+                salesmanLocked: false,
+            }, isEdit);
+            return;
+        }
+
         updateCard(cardid, {
             salesmanid,
             salesmanName: salesman ? salesman.fullname : '',
@@ -209,7 +276,24 @@ export default function HandedGoodsManagement() {
         }, isEdit);
     };
 
-    // ========== Auto-fill price when product is selected ==========
+    const handleBatteryToggle = (cardid, battery, isEdit = false) => {
+        const card = (isEdit ? editCards : cards).find(c => c.cardid === cardid);
+        if (!card) return;
+
+        let newBatteries = [...card.batteries];
+        if (newBatteries.includes(battery)) {
+            newBatteries = newBatteries.filter(b => b !== battery);
+        } else {
+            if (assignedBatteries.includes(battery)) {
+                alert(`Battery ${battery} is already assigned to someone else!`);
+                return;
+            }
+            newBatteries.push(battery);
+        }
+
+        updateCard(cardid, { batteries: newBatteries, saved: false }, isEdit);
+    };
+
     const handleSelectProduct = (cardid, rowid, productid, isEdit = false) => {
         const product = products.find(
             (p) => String(p.productid) === String(productid)
@@ -242,16 +326,21 @@ export default function HandedGoodsManagement() {
     };
 
     const addCard = () => {
+        if (editCards.length > 0) {
+            alert('Please close the edit mode first');
+            return;
+        }
         setCards((prev) => [...prev, newCard(prev.length + 1)]);
+        fetchSalesmen();
     };
 
     const removeCard = (cardid, isEdit = false) => {
+        if (!confirm('Are you sure you want to remove this card? All unsaved data will be lost.')) {
+            return;
+        }
+
         if (isEdit) {
-            setEditCards((prev) =>
-                prev
-                    .filter((c) => c.cardid !== cardid)
-                    .map((c, idx) => ({ ...c, serial: idx + 1 }))
-            );
+            setEditCards([]);
         } else {
             setCards((prev) =>
                 prev
@@ -268,20 +357,17 @@ export default function HandedGoodsManagement() {
         return evaluated;
     };
 
-    // ========== FIXED: Final amount calculation ==========
     const getFinalAmount = (card) => {
         const itemsTotal = cardItemsTotal(card);
         const returnVal = getReturnValue(card) || 0;
         const commissionVal = parseFloat(card.commission) || 0;
         const total = itemsTotal - returnVal;
-        // Only show final amount if commission is entered
         if (card.commission === '' || card.commission === null || card.commission === undefined) {
             return null;
         }
         return Math.round((total - commissionVal) * 100) / 100;
     };
 
-    // ========== FIXED: Final amount for database ==========
     const getFinalAmountForDB = (card) => {
         const itemsTotal = cardItemsTotal(card);
         const returnVal = getReturnValue(card) || 0;
@@ -315,36 +401,56 @@ export default function HandedGoodsManagement() {
         const payload = {
             salesmanid: card.salesmanid,
             date: date,
-            details: JSON.stringify(
-                validRows.map((r) => ({
+            details: JSON.stringify({
+                batteries: card.batteries || [],
+                items: validRows.map((r) => ({
                     productid: r.productid,
                     productname: r.productname,
                     qty: parseFloat(r.qty),
                     price: parseFloat(r.price),
                     total: rowTotal(r),
                 }))
-            ),
+            }),
             returnamt: returnVal,
             commission: parseFloat(card.commission) || 0,
             finalamount: finalAmount,
         };
 
-        if (card.editMode && card.handedgoodsid) {
+        const isUpdate = card.handedgoodsid || card.isUpdateMode || card.editMode;
+
+        if (isUpdate && card.handedgoodsid) {
             payload.handedgoodsid = card.handedgoodsid;
         }
 
         updateCard(card.cardid, { saving: true }, isEdit);
         try {
-            const endpoint = card.editMode ? 'handedgoods/update-handed-goods' : 'handedgoods/insert-handed-goods';
+            const endpoint = isUpdate ? 'handedgoods/update-handed-goods' : 'handedgoods/insert-handed-goods';
             const result = await postData(endpoint, payload);
             if (result && result.status) {
-                alert(card.editMode ? 'Record updated successfully!' : 'Record saved successfully!');
-                updateCard(card.cardid, { saving: false, saved: true, editMode: false }, isEdit);
-                if (showRecords) fetchRecords();
-                // Remove edit card after save
+                alert(isUpdate ? 'Record updated successfully!' : 'Record saved successfully!');
+
+                let newId = null;
+                if (result.data) {
+                    newId = result.data.handedgoodsid || result.data?.data?.handedgoodsid || result.data?.handedgoodsid;
+                }
+
+                updateCard(card.cardid, {
+                    saving: false,
+                    saved: true,
+                    editMode: false,
+                    isUpdateMode: true,
+                    handedgoodsid: newId || card.handedgoodsid,
+                }, isEdit);
+
+                // Refresh only non-salesman data after save
+                await Promise.all([
+                    fetchAssignedBatteries(),
+                    showRecords ? fetchRecords() : null
+                ]);
+
                 if (isEdit) {
                     setTimeout(() => {
-                        setEditCards(prev => prev.filter(c => c.cardid !== card.cardid));
+                        setEditCards([]);
                     }, 1500);
                 }
             } else {
@@ -363,14 +469,117 @@ export default function HandedGoodsManagement() {
     const inputBase =
         'border border-gray-300 rounded-md px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white';
 
+    // ---------- Battery Dropdown Component ----------
+    const BatteryDropdown = ({ card, isEdit }) => {
+        const [isOpen, setIsOpen] = useState(false);
+        const dropdownRef = useRef(null);
+
+        useEffect(() => {
+            const handleClickOutside = (event) => {
+                if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                    setIsOpen(false);
+                }
+            };
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }, []);
+
+        const selectedCount = card.batteries?.length || 0;
+
+        return (
+            <div className="relative" ref={dropdownRef}>
+                <div
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="flex items-center justify-between bg-white border border-gray-300 rounded-md px-3 py-1.5 text-sm cursor-pointer hover:border-blue-500 transition-colors min-w-[200px]"
+                >
+                    <span className="text-gray-700">
+                        {selectedCount > 0 ? (
+                            <span className="flex items-center gap-1 flex-wrap">
+                                {card.batteries.slice(0, 2).map((b, i) => (
+                                    <span key={i} className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-xs">
+                                        {b}
+                                    </span>
+                                ))}
+                                {selectedCount > 2 && (
+                                    <span className="text-xs text-gray-500">+{selectedCount - 2} more</span>
+                                )}
+                            </span>
+                        ) : (
+                            <span className="text-gray-400">Select batteries...</span>
+                        )}
+                    </span>
+                    <svg
+                        className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </div>
+
+                {isOpen && (
+                    <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                        {batteryOptions.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-gray-500">Loading batteries...</div>
+                        ) : (
+                            batteryOptions.map((battery) => {
+                                const isAssigned = assignedBatteries.includes(battery);
+                                const isSelected = card.batteries?.includes(battery);
+                                const isDisabled = isAssigned && !isSelected;
+
+                                return (
+                                    <div
+                                        key={battery}
+                                        onClick={() => {
+                                            if (!isDisabled) {
+                                                handleBatteryToggle(card.cardid, battery, isEdit);
+                                            }
+                                        }}
+                                        className={`flex items-center px-3 py-2 cursor-pointer hover:bg-blue-50 transition-colors ${isSelected ? 'bg-blue-50' : ''
+                                            } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            disabled={isDisabled}
+                                            onChange={() => { }}
+                                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                        />
+                                        <span className={`ml-2 text-sm ${isSelected ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
+                                            {battery}
+                                        </span>
+                                        {isAssigned && !isSelected && (
+                                            <span className="ml-2 text-xs text-red-500">(Assigned)</span>
+                                        )}
+                                        {isSelected && (
+                                            <span className="ml-auto text-blue-600 text-xs">✓</span>
+                                        )}
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     // ---------- Render Card ----------
     const renderCard = (card, isEdit = false) => {
         const cardList = isEdit ? editCards : cards;
-        const setCardList = isEdit ? setEditCards : setCards;
+        const otherSelectedSalesmanIds = new Set(
+            [...cards, ...editCards]
+                .filter((c) => c.cardid !== card.cardid && c.salesmanid)
+                .map((c) => String(c.salesmanid))
+        );
 
+        const availableSalesmen = salesmen.filter(
+            (s) => !otherSelectedSalesmanIds.has(String(s.salesmanid))
+        );
         return (
             <div key={card.cardid} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 relative">
-                {cardList.length > 1 && !card.editMode && (
+                {!isEdit && !card.editMode && (
                     <button
                         onClick={() => removeCard(card.cardid, isEdit)}
                         title="Remove card"
@@ -380,43 +589,62 @@ export default function HandedGoodsManagement() {
                     </button>
                 )}
 
-                {/* Edit Mode Badge */}
+                {isEdit && (
+                    <button
+                        onClick={() => {
+                            if (confirm('Are you sure you want to cancel editing? All changes will be lost.')) {
+                                setEditCards([]);
+                            }
+                        }}
+                        title="Close edit"
+                        className="absolute -top-2 -right-2 w-6 h-6 rounded-full border border-gray-300 text-gray-500 text-xs flex items-center justify-center hover:bg-red-50 hover:border-red-400 hover:text-red-500 bg-white transition-colors"
+                    >
+                        ×
+                    </button>
+                )}
+
                 {card.editMode && (
-                    <span className="absolute top-2 right-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                    <span className="absolute top-2 right-8 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
                         Edit Mode
                     </span>
                 )}
 
-                {/* Salesman header box */}
+                {card.isUpdateMode && !card.editMode && card.handedgoodsid && card.saved && (
+                    <span className="absolute top-2 right-8 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                        ✓ Saved
+                    </span>
+                )}
+
                 <div className={`${inputBase} inline-block mb-3 font-medium bg-gray-50`}>
-                    {!card.salesmanLocked ? (
-                        <div className="flex items-center gap-2">
-                            <span className="text-gray-700">#{card.serial} -</span>
-                            <select
-                                value={card.salesmanid}
-                                onChange={(e) =>
-                                    handleSelectSalesman(card.cardid, e.target.value, isEdit)
-                                }
-                                className="border-none outline-none text-sm bg-transparent"
-                            >
-                                <option value="">Select salesman</option>
-                                {salesmen.map((s) => (
-                                    <option key={s.salesmanid} value={s.salesmanid}>
-                                        {s.fullname}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    ) : (
-                        <span className="text-gray-800">
-                            #{card.serial} - {card.salesmanName}
-                        </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                        <span className="text-gray-700">#{card.serial} -</span>
+                        <select
+                            value={card.salesmanid || ''}
+                            onChange={(e) =>
+                                handleSelectSalesman(card.cardid, e.target.value, isEdit)
+                            }
+                            className="border-none outline-none text-sm bg-transparent"
+                        >
+                            <option value="">Select salesman</option>
+                            {availableSalesmen.map((s) => (
+                                <option key={s.salesmanid} value={s.salesmanid}>
+                                    {s.fullname}
+                                </option>
+                            ))}
+                            {card.salesmanid && !salesmen.find(s => String(s.salesmanid) === String(card.salesmanid)) && (
+                                <option value={card.salesmanid} disabled>
+                                    {card.salesmanName || 'Unavailable'} (Not Available)
+                                </option>
+                            )}
+                        </select>
+                        {card.salesmanLocked && <><span className="text-sm font-medium text-gray-700">Batteries:</span>
+                        <BatteryDropdown card={card} isEdit={isEdit} /></>}
+                    </div>
                 </div>
 
-                {/* Rest of card only shows once salesman is picked */}
                 {card.salesmanLocked && (
                     <div className="space-y-3">
+
                         {card.rows.map((row, idx) => {
                             const isLastRow = idx === card.rows.length - 1;
                             return (
@@ -489,7 +717,6 @@ export default function HandedGoodsManagement() {
                             );
                         })}
 
-                        {/* Total of items */}
                         <div className="flex items-center justify-end gap-2 pt-1 border-t border-gray-100 pr-17">
                             <span className="text-sm font-medium text-gray-700">Items Total:</span>
                             <div className={`${inputBase} w-20 text-end bg-gray-50 font-medium`}>
@@ -497,7 +724,6 @@ export default function HandedGoodsManagement() {
                             </div>
                         </div>
 
-                        {/* Return expression */}
                         <div className="flex items-center justify-end gap-2 pr-17">
                             <span className="text-sm font-medium text-gray-700">Return:</span>
                             <input
@@ -520,7 +746,6 @@ export default function HandedGoodsManagement() {
                             </div>
                         </div>
 
-                        {/* Total */}
                         <div className="flex items-center justify-end gap-2 pt-1 border-t border-gray-100 pr-17">
                             <span className="text-sm font-medium text-gray-700">Total:</span>
                             <div className={`${inputBase} w-20 text-end bg-gray-50 font-medium`}>
@@ -528,7 +753,6 @@ export default function HandedGoodsManagement() {
                             </div>
                         </div>
 
-                        {/* Commission */}
                         <div className="flex items-center justify-end gap-2 pr-17">
                             <span className="text-sm font-medium text-gray-700">Commission:</span>
                             <input
@@ -546,7 +770,6 @@ export default function HandedGoodsManagement() {
                             />
                         </div>
 
-                        {/* ========== UPDATED: Final amount - only show when commission is entered ========== */}
                         <div className="flex items-center justify-end gap-2 pt-1 border-t border-gray-200 pr-17">
                             <span className="text-sm font-semibold text-gray-900">
                                 Final Amount:
@@ -557,19 +780,18 @@ export default function HandedGoodsManagement() {
                                 {getFinalAmount(card) !== null ? (
                                     `₹${getFinalAmount(card).toFixed(0)}`
                                 ) : (
-                                    <span className="text-gray-400 text-sm">Enter commission</span>
+                                    <span className="text-gray-400 text-sm">0</span>
                                 )}
                             </div>
                         </div>
 
-                        {/* Save button */}
                         <div className="flex justify-end pt-2 pr-17">
                             <button
                                 onClick={() => handleSave(card, isEdit)}
                                 disabled={card.saving}
                                 className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${card.saved
                                     ? 'bg-green-100 text-green-700 border border-green-300 cursor-default'
-                                    : card.editMode
+                                    : (card.editMode || card.isUpdateMode || card.handedgoodsid)
                                         ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
                                         : 'bg-indigo-600 text-white hover:bg-indigo-700'
                                     } ${card.saving ? 'opacity-60 cursor-not-allowed' : ''}`}
@@ -578,14 +800,14 @@ export default function HandedGoodsManagement() {
                                     ? 'Saving...'
                                     : card.saved
                                         ? '✓ Saved'
-                                        : card.editMode
+                                        : (card.editMode || card.isUpdateMode || card.handedgoodsid)
                                             ? 'Update Record'
                                             : 'Save Record'}
                             </button>
                             {card.editMode && card.saved && (
                                 <button
                                     onClick={() => {
-                                        setEditCards(prev => prev.filter(c => c.cardid !== card.cardid));
+                                        setEditCards([]);
                                         if (showRecords) fetchRecords();
                                     }}
                                     className="ml-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm transition-colors"
@@ -627,6 +849,7 @@ export default function HandedGoodsManagement() {
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batteries</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Return</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Commission</th>
@@ -641,7 +864,10 @@ export default function HandedGoodsManagement() {
                                 <td className="px-4 py-3 text-sm font-medium text-gray-900">{record.salesman_name}</td>
                                 <td className="px-4 py-3 text-sm text-gray-500">{record.date}</td>
                                 <td className="px-4 py-3 text-sm text-gray-500">
-                                    {Array.isArray(record.details) ? record.details.length : 0} items
+                                    {record.details?.batteries?.length > 0 ? record.details.batteries.join(', ') : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-500">
+                                    {record.details?.items?.length || 0} items
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-500">₹{parseFloat(record.returnamt || 0).toFixed(0)}</td>
                                 <td className="px-4 py-3 text-sm text-gray-500">₹{parseFloat(record.commission || 0).toFixed(0)}</td>
@@ -672,7 +898,6 @@ export default function HandedGoodsManagement() {
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-6">
-            {/* Header: Date + Add card button */}
             <div className="flex items-center justify-between mb-6">
                 <div className={`${inputBase} flex items-center gap-2 font-medium`}>
                     <span className="text-gray-700">Date:</span>
@@ -709,7 +934,6 @@ export default function HandedGoodsManagement() {
                 <p className="text-center text-sm text-gray-400 mb-4">Loading...</p>
             )}
 
-            {/* Records Display Section */}
             {showRecords && (
                 <div className="mb-6">
                     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -755,12 +979,6 @@ export default function HandedGoodsManagement() {
                                         </select>
                                     </div>
                                 )}
-                                <button
-                                    onClick={fetchRecords}
-                                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-md transition-colors"
-                                >
-                                    Filter
-                                </button>
                             </div>
                         </div>
                         {renderRecordsTable()}
@@ -768,20 +986,30 @@ export default function HandedGoodsManagement() {
                 </div>
             )}
 
-            {/* ========== UPDATED: Edit Cards Section (separate from insert) ========== */}
-            {editCards.length > 0 && (
-                <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Editing Records</h3>
+            {editCards.length > 0 ? (
+                <div>
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold text-yellow-600">Editing Record</h3>
+                        <button
+                            onClick={() => {
+                                if (confirm('Are you sure you want to cancel editing? All changes will be lost.')) {
+                                    setEditCards([]);
+                                }
+                            }}
+                            className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm transition-colors"
+                        >
+                            Cancel Edit
+                        </button>
+                    </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {editCards.map((card) => renderCard(card, true))}
                     </div>
                 </div>
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {cards.map((card) => renderCard(card, false))}
+                </div>
             )}
-
-            {/* Insert Cards grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {cards.map((card) => renderCard(card, false))}
-            </div>
         </div>
     );
 }

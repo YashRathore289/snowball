@@ -21,19 +21,53 @@ export default function DebtManagement() {
         totalReceived: 0,
         remaining: 0
     });
+    const [salesmanDebtSummary, setSalesmanDebtSummary] = useState({});
 
-    // Fetch all salesmen
+    // Fetch all salesmen with their debt summary
     const fetchSalesmen = async () => {
         setLoading(true);
         try {
             const result = await postData('employee/retrieve-salesman', {});
             if (result && result.status) {
                 setSalesmen(result.data);
+                // Fetch debt summary for all salesmen
+                await fetchAllSalesmenDebtSummary(result.data);
             }
         } catch (error) {
             console.error('Error fetching salesmen:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Fetch debt summary for all salesmen
+    const fetchAllSalesmenDebtSummary = async (salesmenList) => {
+        try {
+            const summaryData = {};
+            for (const salesman of salesmenList) {
+                const result = await postData('debt/retrieve-debts', { salesmanid: salesman.salesmanid });
+                if (result && result.status) {
+                    let totalGiven = 0;
+                    let totalReceived = 0;
+                    result.data.forEach(debt => {
+                        const amount = parseFloat(debt.amount);
+                        if (debt.type === 'give') {
+                            totalGiven += amount;
+                        } else if (debt.type === 'receive') {
+                            totalReceived += amount;
+                        }
+                    });
+                    summaryData[salesman.salesmanid] = {
+                        totalGiven,
+                        totalReceived,
+                        remaining: totalGiven - totalReceived,
+                        hasDebt: result.data.length > 0
+                    };
+                }
+            }
+            setSalesmanDebtSummary(summaryData);
+        } catch (error) {
+            console.error('Error fetching debt summaries:', error);
         }
     };
 
@@ -90,6 +124,8 @@ export default function DebtManagement() {
         setViewMode('list');
         setSelectedSalesman(null);
         setDebts([]);
+        // Refresh the summary when coming back
+        fetchAllSalesmenDebtSummary(salesmen);
     };
 
     // Handle Add Debt
@@ -139,6 +175,8 @@ export default function DebtManagement() {
                     alert('Debt record updated successfully!');
                     setIsModalOpen(false);
                     fetchSalesmanDebts(selectedSalesman.salesmanid);
+                    // Update summary in list
+                    fetchAllSalesmenDebtSummary(salesmen);
                 } else {
                     alert(result?.message || 'Failed to update');
                 }
@@ -154,6 +192,8 @@ export default function DebtManagement() {
                     alert('Debt record added successfully!');
                     setIsModalOpen(false);
                     fetchSalesmanDebts(selectedSalesman.salesmanid);
+                    // Update summary in list
+                    fetchAllSalesmenDebtSummary(salesmen);
                 } else {
                     alert(result?.message || 'Failed to add');
                 }
@@ -173,6 +213,8 @@ export default function DebtManagement() {
             if (result && result.status) {
                 alert('Debt record deleted successfully!');
                 fetchSalesmanDebts(selectedSalesman.salesmanid);
+                // Update summary in list
+                fetchAllSalesmenDebtSummary(salesmen);
             } else {
                 alert(result?.message || 'Failed to delete');
             }
@@ -289,7 +331,7 @@ export default function DebtManagement() {
         );
     };
 
-    // Render Salesman List
+    // Render Salesman List with Debt Summary
     const renderSalesmanList = () => {
         if (loading) {
             return (
@@ -317,26 +359,36 @@ export default function DebtManagement() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman ID</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mobile</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {salesmen.map((salesman, index) => (
-                                <tr key={salesman.salesmanid} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">#{salesman.salesmanid}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{salesman.fullname}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{salesman.mobileno}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                        <button
-                                            onClick={() => handleSalesmanClick(salesman)}
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
-                                        >
-                                            View Debt
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
+                            {salesmen.map((salesman, index) => {
+                                const summary = salesmanDebtSummary[salesman.salesmanid] || { totalGiven: 0, totalReceived: 0, remaining: 0, hasDebt: false };
+                                return (
+                                    <tr key={salesman.salesmanid} className={`hover:bg-gray-50 transition-colors ${summary.hasDebt ? 'bg-blue-50/30' : ''}`}>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">#{salesman.salesmanid}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{salesman.fullname}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{salesman.mobileno}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
+                                            <span className={'text-orange-600'}>
+                                                ₹{Math.abs(summary.remaining).toFixed(0)}
+                                                {summary.remaining < 0 && ' (Extra)'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            <button
+                                                onClick={() => handleSalesmanClick(salesman)}
+                                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
+                                            >
+                                                {summary.hasDebt ? 'View Details' : 'Add Debt'}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -486,7 +538,7 @@ export default function DebtManagement() {
             <div className="mb-8">
                 <h2 className="text-2xl font-semibold text-gray-900">Debt Management</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                    {viewMode === 'list' ? 'Select a salesman to view and manage their debts' : `Managing debts for ${selectedSalesman?.fullname}`}
+                    {viewMode === 'list' ? 'View all salesmen with their debt summary' : `Managing debts for ${selectedSalesman?.fullname}`}
                 </p>
             </div>
 

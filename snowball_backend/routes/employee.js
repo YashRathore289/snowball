@@ -65,23 +65,65 @@ router.post("/retrieve-salesman", function (req, res, next) {
         pool.query(query, values, function (error, result) {
             if (error) {
                 console.log(error);
-                res.status(500).json({ 
-                    status: false, 
-                    message: "Database Error...", 
-                    error: error.sqlMessage 
+                res.status(500).json({
+                    status: false,
+                    message: "Database Error...",
+                    error: error.sqlMessage
                 });
             } else {
                 if (salesmanid && result.length === 0) {
-                    return res.status(404).json({ 
-                        status: false, 
-                        message: "Salesman not found", 
-                        data: [] 
+                    return res.status(404).json({
+                        status: false,
+                        message: "Salesman not found",
+                        data: []
                     });
                 }
                 return res.status(200).json({
                     status: true,
                     message: "Success",
                     count: result.length,
+                    data: result
+                });
+            }
+        });
+    } catch (e) {
+        console.log(e);
+        res.status(500).json({ status: false, message: "Technical Issue..." });
+    }
+});
+
+router.post("/retrieve-salesmen-without-attendance", function (req, res, next) {
+    try {
+        const { date } = req.body;
+        const searchDate = date || new Date().toISOString().split('T')[0];
+
+        const query = `
+            SELECT 
+                s.salesmanid, 
+                s.fullname, 
+                s.mobileno,
+                s.photo
+            FROM salesman s
+            LEFT JOIN handed_goods hg ON s.salesmanid = hg.salesmanid 
+                AND hg.date = ?
+            WHERE hg.handedgoodsid IS NULL
+            ORDER BY s.fullname ASC
+        `;
+
+        pool.query(query, [searchDate], function (error, result) {
+            if (error) {
+                console.log(error);
+                res.status(500).json({
+                    status: false,
+                    message: "Database Error...",
+                    error: error.sqlMessage
+                });
+            } else {
+                return res.status(200).json({
+                    status: true,
+                    message: "Success",
+                    count: result.length,
+                    date: searchDate,
                     data: result
                 });
             }
@@ -142,10 +184,10 @@ router.post("/insert-salesman", upload.fields([
         pool.query(query, values, function (error, result) {
             if (error) {
                 console.log(error);
-                res.status(500).json({ 
-                    status: false, 
-                    message: "Database Error...", 
-                    error: error.sqlMessage 
+                res.status(500).json({
+                    status: false,
+                    message: "Database Error...",
+                    error: error.sqlMessage
                 });
             } else {
                 // Retrieve the inserted record
@@ -159,7 +201,7 @@ router.post("/insert-salesman", upload.fields([
                     DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') as createdat, 
                     DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') as updatedat 
                     FROM salesman WHERE salesmanid = ?`;
-                
+
                 pool.query(selectQuery, [result.insertId], function (err, insertedData) {
                     if (err) {
                         return res.status(200).json({
@@ -190,11 +232,11 @@ router.post("/update-salesman", upload.fields([
 ]), function (req, res, next) {
     try {
         const { salesmanid } = req.body;
-        
+
         if (!salesmanid) {
-            return res.status(400).json({ 
-                status: false, 
-                message: "Salesman ID is required" 
+            return res.status(400).json({
+                status: false,
+                message: "Salesman ID is required"
             });
         }
 
@@ -244,9 +286,9 @@ router.post("/update-salesman", upload.fields([
         updateFields.push('updatedat = NOW()');
 
         if (updateFields.length === 0) {
-            return res.status(400).json({ 
-                status: false, 
-                message: "No fields to update" 
+            return res.status(400).json({
+                status: false,
+                message: "No fields to update"
             });
         }
 
@@ -256,16 +298,16 @@ router.post("/update-salesman", upload.fields([
         pool.query(query, values, function (error, result) {
             if (error) {
                 console.log(error);
-                res.status(500).json({ 
-                    status: false, 
-                    message: "Database Error...", 
-                    error: error.sqlMessage 
+                res.status(500).json({
+                    status: false,
+                    message: "Database Error...",
+                    error: error.sqlMessage
                 });
             } else {
                 if (result.affectedRows === 0) {
-                    return res.status(404).json({ 
-                        status: false, 
-                        message: "Salesman not found" 
+                    return res.status(404).json({
+                        status: false,
+                        message: "Salesman not found"
                     });
                 }
 
@@ -280,7 +322,7 @@ router.post("/update-salesman", upload.fields([
                     DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') as createdat, 
                     DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') as updatedat 
                     FROM salesman WHERE salesmanid = ?`;
-                
+
                 pool.query(selectQuery, [salesmanid], function (err, updatedData) {
                     if (err) {
                         return res.status(200).json({
@@ -310,9 +352,9 @@ router.post("/delete-salesman", function (req, res, next) {
         const { salesmanid } = req.body;
 
         if (!salesmanid) {
-            return res.status(400).json({ 
-                status: false, 
-                message: "Salesman ID is required" 
+            return res.status(400).json({
+                status: false,
+                message: "Salesman ID is required"
             });
         }
 
@@ -321,21 +363,21 @@ router.post("/delete-salesman", function (req, res, next) {
             salesmanid, fullname, mobileno, 
             idproof, salesmansignature, ownersignature 
             FROM salesman WHERE salesmanid = ?`;
-        
+
         pool.query(selectQuery, [salesmanid], function (error, result) {
             if (error) {
                 console.log(error);
-                return res.status(500).json({ 
-                    status: false, 
-                    message: "Database Error...", 
-                    error: error.sqlMessage 
+                return res.status(500).json({
+                    status: false,
+                    message: "Database Error...",
+                    error: error.sqlMessage
                 });
             }
 
             if (result.length === 0) {
-                return res.status(404).json({ 
-                    status: false, 
-                    message: "Salesman not found" 
+                return res.status(404).json({
+                    status: false,
+                    message: "Salesman not found"
                 });
             }
 
@@ -343,14 +385,14 @@ router.post("/delete-salesman", function (req, res, next) {
 
             // Delete the salesman
             const deleteQuery = "DELETE FROM salesman WHERE salesmanid = ?";
-            
+
             pool.query(deleteQuery, [salesmanid], function (error, deleteResult) {
                 if (error) {
                     console.log(error);
-                    return res.status(500).json({ 
-                        status: false, 
-                        message: "Database Error...", 
-                        error: error.sqlMessage 
+                    return res.status(500).json({
+                        status: false,
+                        message: "Database Error...",
+                        error: error.sqlMessage
                     });
                 }
 

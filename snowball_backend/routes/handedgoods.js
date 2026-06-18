@@ -295,7 +295,7 @@ router.post("/update-handed-goods", function (req, res, next) {
 
                 const currentReturn = currentResult.length > 0 ? parseFloat(currentResult[0].returnamt) : 0;
                 const currentCommission = currentResult.length > 0 ? parseFloat(currentResult[0].commission) : 0;
-                
+
                 const newReturn = returnamt !== undefined ? parseFloat(returnamt) : currentReturn;
                 const newCommission = commission !== undefined ? parseFloat(commission) : currentCommission;
                 const finalAmount = newReturn + newCommission;
@@ -546,6 +546,96 @@ router.post("/handed-goods-summary", function (req, res, next) {
                 message: "Success",
                 data: result
             });
+        });
+    } catch (e) {
+        console.log(e);
+        res.status(500).json({ status: false, message: "Technical Issue..." });
+    }
+});
+
+router.post("/monthly-sales-report", function (req, res, next) {
+    try {
+        const { month, year } = req.body;
+
+        const searchMonth = month || new Date().getMonth() + 1;
+        const searchYear = year || new Date().getFullYear();
+
+        // Query to get all salesmen and their handed goods for the month
+        const query = `
+            SELECT 
+                s.salesmanid,
+                s.fullname as salesman_name,
+                DATE_FORMAT(hg.date, '%Y-%m-%d') as sale_date,
+                hg.returnamt,
+                hg.commission,
+                hg.finalamount,
+                hg.details
+            FROM salesman s
+            LEFT JOIN handed_goods hg ON s.salesmanid = hg.salesmanid 
+                AND MONTH(hg.date) = ? 
+                AND YEAR(hg.date) = ?
+            WHERE s.salesmanid IN (SELECT DISTINCT salesmanid FROM handed_goods WHERE MONTH(date) = ? AND YEAR(date) = ?)
+            ORDER BY hg.date ASC, s.fullname ASC
+        `;
+
+        pool.query(query, [searchMonth, searchYear, searchMonth, searchYear], function (error, result) {
+            if (error) {
+                console.log(error);
+                res.status(500).json({
+                    status: false,
+                    message: "Database Error...",
+                    error: error.sqlMessage
+                });
+            } else {
+                // Process data to group by date and salesman
+                const salesmenData = {};
+                const allDates = new Set();
+
+                result.forEach(record => {
+                    const salesmanId = record.salesmanid;
+                    const salesmanName = record.salesman_name;
+                    const saleDate = record.sale_date;
+                    const finalAmount = parseFloat(record.finalamount) || 0;
+
+                    if (!salesmenData[salesmanId]) {
+                        salesmenData[salesmanId] = {
+                            salesmanid: salesmanId,
+                            salesman_name: salesmanName,
+                            entries: {},
+                            total: 0
+                        };
+                    }
+
+                    if (saleDate) {
+                        salesmenData[salesmanId].entries[saleDate] = finalAmount;
+                        salesmenData[salesmanId].total += finalAmount;
+                        allDates.add(saleDate);
+                    }
+                });
+
+                // Sort dates
+                const sortedDates = Array.from(allDates).sort();
+
+                // Build the final response
+                const reportData = {
+                    month: searchMonth,
+                    year: searchYear,
+                    dates: sortedDates,
+                    salesmen: Object.values(salesmenData),
+                    grandTotal: 0
+                };
+
+                // Calculate grand total
+                reportData.salesmen.forEach(salesman => {
+                    reportData.grandTotal += salesman.total;
+                });
+
+                return res.status(200).json({
+                    status: true,
+                    message: "Success",
+                    data: reportData
+                });
+            }
         });
     } catch (e) {
         console.log(e);

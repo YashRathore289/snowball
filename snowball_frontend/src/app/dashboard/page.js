@@ -6,6 +6,8 @@ import ProductManagement from './ProductManagement';
 import CompanyProductManagement from './CompanyProduct';
 import AttendanceManagement from './AttendanceManagement';
 import HandedGoodsManagement from './HandedGoods';
+import BatteryManagement from './Battery';
+import TotalSales from './TotalSales';
 
 export default function Dashboard() {
     const [activeTab, setActiveTab] = useState('home');
@@ -120,7 +122,7 @@ export default function Dashboard() {
                                                 <p className="font-medium text-gray-900">{item.salesman}</p>
                                                 <p className="text-sm text-gray-500">{item.month}</p>
                                             </div>
-                                            <span className="text-green-600 font-semibold">₹{item.amount.toLocaleString()}</span>
+                                            <span className="text-green-600 font-semibold">₹{item.amount.toFixed(2)}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -204,57 +206,13 @@ export default function Dashboard() {
 
             case 'handed-goods':
                 return <HandedGoodsManagement />;
-                
+
+            case 'batteries':
+                return <BatteryManagement />;
+
             case 'total-sales':
-                return (
-                    <div>
-                        <div className="mb-8">
-                            <h2 className="text-2xl font-semibold text-gray-900">Total Sales</h2>
-                            <p className="text-sm text-gray-500 mt-1">Comprehensive sales performance overview</p>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                            <div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-lg shadow-sm p-6">
-                                <p className="text-sm opacity-80">Total Revenue</p>
-                                <p className="text-3xl font-bold mt-1">₹4,30,000</p>
-                                <p className="text-xs opacity-75 mt-2">↑ 12.5% from last month</p>
-                            </div>
-                            <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 text-white rounded-lg shadow-sm p-6">
-                                <p className="text-sm opacity-80">Total Orders</p>
-                                <p className="text-3xl font-bold mt-1">156</p>
-                                <p className="text-xs opacity-75 mt-2">↑ 8% from last month</p>
-                            </div>
-                            <div className="bg-gradient-to-br from-purple-600 to-purple-700 text-white rounded-lg shadow-sm p-6">
-                                <p className="text-sm opacity-80">Active Salesmen</p>
-                                <p className="text-3xl font-bold mt-1">12</p>
-                                <p className="text-xs opacity-75 mt-2">↑ 2 new this month</p>
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Month</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {totalSalesData.map((item) => (
-                                            <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.id}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.salesman}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-emerald-600">₹{item.amount.toLocaleString()}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.month}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                );
+                return <TotalSales />;
+
             case 'transported-goods':
                 return (
                     <div>
@@ -338,11 +296,12 @@ export default function Dashboard() {
         { id: 'home', label: 'Home', icon: '🏠' },
         { id: 'salesman-details', label: 'Salesman Details', icon: '👤' },
         { id: 'attendance', label: 'Attendance Tracker', icon: '📋' },
-        { id: 'company-products', label: 'Company Products', icon: '🏭' },
-        { id: 'products', label: 'Products', icon: '📦' },
-        { id: 'debts', label: 'Debt Management', icon: '💰' },
         { id: 'handed-goods', label: 'Handed Goods', icon: '📦' },
+        { id: 'debts', label: 'Debt Management', icon: '💰' },
+        { id: 'company-products', label: 'Company Products', icon: '🏭' },
         { id: 'total-sales', label: 'Total Sales', icon: '💰' },
+        { id: 'products', label: 'Products', icon: '📦' },
+        { id: 'batteries', label: 'Battery', icon: '🔋' },
         { id: 'transported-goods', label: 'Transported Goods', icon: '🚚' },
         { id: 'bought-products', label: 'Bought Products', icon: '🛒' },
     ];
