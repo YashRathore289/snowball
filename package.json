@@ -18,30 +18,19 @@
   "build": {
     "appId": "com.snowball.app",
     "productName": "SnowBall",
+    "asar": false,
     "files": [
       "main.js",
       "preload.js",
-      "snowball_frontend/out/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "snowball_backend",
-        "to": "snowball_backend",
-        "filter": ["**/*", "!node_modules/**/*"]
-      }
+      "snowball_frontend/out/**/*",
+      "snowball_backend/**/*",
+      "!snowball_backend/node_modules/**/*"
     ],
     "directories": {
       "output": "dist"
     },
     "win": {
-      "target": "nsis",
-      "icon": "icon.ico"
-    },
-    "mac": {
-      "target": "dmg"
-    },
-    "linux": {
-      "target": "AppImage"
+      "target": "nsis"
     }
   }
 }

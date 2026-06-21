@@ -1,298 +1,194 @@
+// shopOwnerRoutes.js
 const express = require('express');
 const router = express.Router();
 const pool = require('./pool');
+const rateLimiter = require('./ratelimiter');
 
-// ==================== 1. SELECT (Retrieve) API ====================
-router.post("/retrieve-shop-owners", function (req, res, next) {
-    try {
-        const { shopownerid } = req.body;
+// Global rate limit: 100 requests per 15 minutes per IP
+router.use(rateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: 'Too many requests, please try again after 15 minutes.'
+}));
 
-        let query;
-        let values = [];
+// ==================== 1. RETRIEVE SHOP OWNERS ====================
+router.post("/retrieve-shop-owners", (req, res) => {
+  try {
+    // Frontend always fetches all owners; ignore optional shopownerid
+    const query = `SELECT 
+      shopownerid,
+      shopownername,
+      shopname,
+      mobileno,
+      address,
+      DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
+      DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') AS updatedat
+    FROM shop_owners 
+    ORDER BY shopownername ASC`;
 
-        if (shopownerid) {
-            query = `SELECT 
-                shopownerid,
-                shopownername,
-                shopname,
-                mobileno,
-                address,
-                DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                FROM shop_owners WHERE shopownerid = ?`;
-            values = [shopownerid];
-        } else {
-            query = `SELECT 
-                shopownerid,
-                shopownername,
-                shopname,
-                mobileno,
-                address,
-                DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                FROM shop_owners ORDER BY shopownername ASC`;
-        }
-
-        pool.query(query, values, function (error, result) {
-            if (error) {
-                console.log(error);
-                res.status(500).json({
-                    status: false,
-                    message: "Database Error...",
-                    error: error.sqlMessage
-                });
-            } else {
-                if (shopownerid && result.length === 0) {
-                    return res.status(404).json({
-                        status: false,
-                        message: "Shop owner not found",
-                        data: []
-                    });
-                }
-                return res.status(200).json({
-                    status: true,
-                    message: "Success",
-                    count: result.length,
-                    data: result
-                });
-            }
-        });
-    } catch (e) {
-        console.log(e);
-        res.status(500).json({ status: false, message: "Technical Issue..." });
-    }
+    pool.query(query, (error, result) => {
+      if (error) {
+        console.error(error);
+        return res.status(500).json({ status: false, message: "Database Error" });
+      }
+      return res.status(200).json({
+        status: true,
+        message: "Success",
+        count: result.length,
+        data: result
+      });
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ status: false, message: "Technical Issue" });
+  }
 });
 
-// ==================== 2. INSERT API ====================
-router.post("/insert-shop-owner", function (req, res, next) {
-    try {
-        const { shopownername, shopname, mobileno, address } = req.body;
+// ==================== 2. INSERT SHOP OWNER ====================
+router.post("/insert-shop-owner", (req, res) => {
+  try {
+    const { shopownername, shopname, mobileno, address } = req.body;
 
-        if (!shopownername || !shopname || !mobileno) {
-            return res.status(400).json({
-                status: false,
-                message: "Shop owner name, shop name, and mobile number are required"
-            });
+    if (!shopownername || !shopname || !mobileno) {
+      return res.status(400).json({ status: false, message: "Shop owner name, shop name, and mobile number are required" });
+    }
+
+    // Check duplicate name
+    pool.query("SELECT shopownerid FROM shop_owners WHERE shopownername = ?", [shopownername], (err, checkResult) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ status: false, message: "Database Error" });
+      }
+      if (checkResult.length > 0) {
+        return res.status(400).json({ status: false, message: "Shop owner already exists" });
+      }
+
+      const query = `INSERT INTO shop_owners 
+        (shopownername, shopname, mobileno, address, createdat, updatedat) 
+        VALUES (?, ?, ?, ?, NOW(), NOW())`;
+      const values = [shopownername, shopname, mobileno, address || null];
+
+      pool.query(query, values, (error, result) => {
+        if (error) {
+          console.error(error);
+          return res.status(500).json({ status: false, message: "Database Error" });
         }
 
-        // Check if already exists
-        const checkQuery = "SELECT shopownerid FROM shop_owners WHERE shopownername = ?";
-        pool.query(checkQuery, [shopownername], function (err, checkResult) {
+        // Return inserted record
+        pool.query(
+          `SELECT shopownerid, shopownername, shopname, mobileno, address,
+          DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
+          DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') AS updatedat
+          FROM shop_owners WHERE shopownerid = ?`,
+          [result.insertId],
+          (err, rows) => {
             if (err) {
-                console.log(err);
-                return res.status(500).json({
-                    status: false,
-                    message: "Database Error...",
-                    error: err.sqlMessage
-                });
+              return res.status(200).json({ status: true, message: "Shop owner added", data: { shopownerid: result.insertId } });
             }
-
-            if (checkResult.length > 0) {
-                return res.status(400).json({
-                    status: false,
-                    message: "Shop owner already exists"
-                });
-            }
-
-            const query = `INSERT INTO shop_owners 
-                (shopownername, shopname, mobileno, address, createdat, updatedat) 
-                VALUES (?, ?, ?, ?, NOW(), NOW())`;
-            const values = [shopownername, shopname, mobileno, address || null];
-
-            pool.query(query, values, function (error, result) {
-                if (error) {
-                    console.log(error);
-                    res.status(500).json({
-                        status: false,
-                        message: "Database Error...",
-                        error: error.sqlMessage
-                    });
-                } else {
-                    const selectQuery = `SELECT 
-                        shopownerid,
-                        shopownername,
-                        shopname,
-                        mobileno,
-                        address,
-                        DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                        DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                        FROM shop_owners WHERE shopownerid = ?`;
-
-                    pool.query(selectQuery, [result.insertId], function (err, insertedData) {
-                        if (err) {
-                            return res.status(200).json({
-                                status: true,
-                                message: "Shop owner added successfully",
-                                data: { shopownerid: result.insertId }
-                            });
-                        }
-                        return res.status(200).json({
-                            status: true,
-                            message: "Shop owner added successfully",
-                            data: insertedData[0]
-                        });
-                    });
-                }
-            });
-        });
-    } catch (e) {
-        console.log(e);
-        res.status(500).json({ status: false, message: "Technical Issue..." });
-    }
+            return res.status(200).json({ status: true, message: "Shop owner added successfully", data: rows[0] });
+          }
+        );
+      });
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ status: false, message: "Technical Issue" });
+  }
 });
 
-// ==================== 3. UPDATE API ====================
-router.post("/update-shop-owner", function (req, res, next) {
-    try {
-        const { shopownerid, shopownername, shopname, mobileno, address } = req.body;
+// ==================== 3. UPDATE SHOP OWNER ====================
+router.post("/update-shop-owner", (req, res) => {
+  try {
+    const { shopownerid, shopownername, shopname, mobileno, address } = req.body;
 
-        if (!shopownerid) {
-            return res.status(400).json({
-                status: false,
-                message: "Shop owner ID is required"
-            });
+    if (!shopownerid) {
+      return res.status(400).json({ status: false, message: "Shop owner ID is required" });
+    }
+    if (!shopownername || !shopname || !mobileno) {
+      return res.status(400).json({ status: false, message: "Name, shop name, and mobile are required" });
+    }
+
+    // Check duplicate name (excluding current)
+    pool.query("SELECT shopownerid FROM shop_owners WHERE shopownername = ? AND shopownerid != ?", [shopownername, shopownerid], (err, checkResult) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ status: false, message: "Database Error" });
+      }
+      if (checkResult.length > 0) {
+        return res.status(400).json({ status: false, message: "Shop owner name already exists" });
+      }
+
+      const query = `UPDATE shop_owners 
+        SET shopownername = ?, shopname = ?, mobileno = ?, address = ?, updatedat = NOW() 
+        WHERE shopownerid = ?`;
+      const values = [shopownername, shopname, mobileno, address || null, shopownerid];
+
+      pool.query(query, values, (error, result) => {
+        if (error) {
+          console.error(error);
+          return res.status(500).json({ status: false, message: "Database Error" });
+        }
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ status: false, message: "Shop owner not found" });
         }
 
-        if (!shopownername || !shopname || !mobileno) {
-            return res.status(400).json({
-                status: false,
-                message: "Shop owner name, shop name, and mobile number are required"
-            });
-        }
-
-        // Check if name already exists (excluding current)
-        const checkQuery = "SELECT shopownerid FROM shop_owners WHERE shopownername = ? AND shopownerid != ?";
-        pool.query(checkQuery, [shopownername, shopownerid], function (err, checkResult) {
+        // Return updated data
+        pool.query(
+          `SELECT shopownerid, shopownername, shopname, mobileno, address,
+          DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
+          DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') AS updatedat
+          FROM shop_owners WHERE shopownerid = ?`,
+          [shopownerid],
+          (err, rows) => {
             if (err) {
-                console.log(err);
-                return res.status(500).json({
-                    status: false,
-                    message: "Database Error...",
-                    error: err.sqlMessage
-                });
+              return res.status(200).json({ status: true, message: "Shop owner updated" });
             }
-
-            if (checkResult.length > 0) {
-                return res.status(400).json({
-                    status: false,
-                    message: "Shop owner name already exists"
-                });
-            }
-
-            const query = `UPDATE shop_owners 
-                SET shopownername = ?, 
-                    shopname = ?, 
-                    mobileno = ?, 
-                    address = ?, 
-                    updatedat = NOW() 
-                WHERE shopownerid = ?`;
-            const values = [shopownername, shopname, mobileno, address || null, shopownerid];
-
-            pool.query(query, values, function (error, result) {
-                if (error) {
-                    console.log(error);
-                    res.status(500).json({
-                        status: false,
-                        message: "Database Error...",
-                        error: error.sqlMessage
-                    });
-                } else {
-                    if (result.affectedRows === 0) {
-                        return res.status(404).json({
-                            status: false,
-                            message: "Shop owner not found"
-                        });
-                    }
-
-                    const selectQuery = `SELECT 
-                        shopownerid,
-                        shopownername,
-                        shopname,
-                        mobileno,
-                        address,
-                        DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                        DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                        FROM shop_owners WHERE shopownerid = ?`;
-
-                    pool.query(selectQuery, [shopownerid], function (err, updatedData) {
-                        if (err) {
-                            return res.status(200).json({
-                                status: true,
-                                message: "Shop owner updated successfully",
-                                affectedRows: result.affectedRows
-                            });
-                        }
-                        return res.status(200).json({
-                            status: true,
-                            message: "Shop owner updated successfully",
-                            affectedRows: result.affectedRows,
-                            data: updatedData[0]
-                        });
-                    });
-                }
-            });
-        });
-    } catch (e) {
-        console.log(e);
-        res.status(500).json({ status: false, message: "Technical Issue..." });
-    }
+            return res.status(200).json({ status: true, message: "Shop owner updated successfully", data: rows[0] });
+          }
+        );
+      });
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ status: false, message: "Technical Issue" });
+  }
 });
 
-// ==================== 4. DELETE API ====================
-router.post("/delete-shop-owner", function (req, res, next) {
-    try {
-        const { shopownerid } = req.body;
-
-        if (!shopownerid) {
-            return res.status(400).json({
-                status: false,
-                message: "Shop owner ID is required"
-            });
-        }
-
-        const selectQuery = `SELECT shopownerid, shopownername, shopname, mobileno, address FROM shop_owners WHERE shopownerid = ?`;
-
-        pool.query(selectQuery, [shopownerid], function (error, result) {
-            if (error) {
-                console.log(error);
-                return res.status(500).json({
-                    status: false,
-                    message: "Database Error...",
-                    error: error.sqlMessage
-                });
-            }
-
-            if (result.length === 0) {
-                return res.status(404).json({
-                    status: false,
-                    message: "Shop owner not found"
-                });
-            }
-
-            const ownerData = result[0];
-            const deleteQuery = "DELETE FROM shop_owners WHERE shopownerid = ?";
-
-            pool.query(deleteQuery, [shopownerid], function (error, deleteResult) {
-                if (error) {
-                    console.log(error);
-                    return res.status(500).json({
-                        status: false,
-                        message: "Database Error...",
-                        error: error.sqlMessage
-                    });
-                }
-
-                return res.status(200).json({
-                    status: true,
-                    message: "Shop owner deleted successfully",
-                    data: ownerData
-                });
-            });
-        });
-    } catch (e) {
-        console.log(e);
-        res.status(500).json({ status: false, message: "Technical Issue..." });
+// ==================== 4. DELETE SHOP OWNER ====================
+router.post("/delete-shop-owner", (req, res) => {
+  try {
+    const { shopownerid } = req.body;
+    if (!shopownerid) {
+      return res.status(400).json({ status: false, message: "Shop owner ID is required" });
     }
+
+    // Fetch before delete
+    pool.query(
+      "SELECT shopownerid, shopownername, shopname, mobileno, address FROM shop_owners WHERE shopownerid = ?",
+      [shopownerid],
+      (err, result) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ status: false, message: "Database Error" });
+        }
+        if (result.length === 0) {
+          return res.status(404).json({ status: false, message: "Shop owner not found" });
+        }
+        const ownerData = result[0];
+
+        pool.query("DELETE FROM shop_owners WHERE shopownerid = ?", [shopownerid], (error) => {
+          if (error) {
+            console.error(error);
+            return res.status(500).json({ status: false, message: "Database Error" });
+          }
+          return res.status(200).json({ status: true, message: "Shop owner deleted successfully", data: ownerData });
+        });
+      }
+    );
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ status: false, message: "Technical Issue" });
+  }
 });
 
 module.exports = router;

@@ -1,17 +1,74 @@
 'use client'
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { postData, serverURL } from '@/Services';
+import { saveCache, getCache } from './ComponentCache';
 
-export default function SalesmanDetails() {
-    const [salesmen, setSalesmen] = useState([]);
-    const [loading, setLoading] = useState(false);
+// Static fields definition (no dependency on state)
+const FIELDS = [
+    { key: 'salesmanid', label: 'Salesman ID', editable: false, addMode: false },
+    { key: 'fullname', label: 'Full Name', editable: true, addMode: true },
+    { key: 'fathername', label: 'Father Name', editable: true, addMode: true },
+    { key: 'mothername', label: 'Mother Name', editable: true, addMode: true },
+    { key: 'dob', label: 'Date of Birth', editable: true, addMode: true, type: 'date' },
+    { key: 'age', label: 'Age', editable: true, addMode: true, type: 'number' },
+    { key: 'married', label: 'Married', editable: true, addMode: true, type: 'select', options: ['Yes', 'No'] },
+    { key: 'permanentaddress', label: 'Permanent Address', editable: true, addMode: true },
+    { key: 'currentaddress', label: 'Current Address', editable: true, addMode: true },
+    { key: 'mobileno', label: 'Mobile Number', editable: true, addMode: true },
+    { key: 'emergencymobileno', label: 'Emergency Mobile', editable: true, addMode: true },
+    { key: 'whatsappno', label: 'WhatsApp Number', editable: true, addMode: true },
+    { key: 'incomedetail', label: 'Income Detail', editable: true, addMode: true, type: 'number' },
+    { key: 'bankname', label: 'Bank Name', editable: true, addMode: true },
+    { key: 'accountno', label: 'Account Number', editable: true, addMode: true },
+    { key: 'ifsccode', label: 'IFSC Code', editable: true, addMode: true },
+    { key: 'aadharno', label: 'Aadhar Number', editable: true, addMode: true },
+    { key: 'panno', label: 'PAN Number', editable: true, addMode: true },
+    { key: 'licenseno', label: 'License Number', editable: true, addMode: true },
+    { key: 'createdat', label: 'Created At', editable: false, addMode: false },
+    { key: 'updatedat', label: 'Updated At', editable: false, addMode: false },
+];
+
+// Category grouping
+const CATEGORIES = [
+    {
+        name: 'Personal Information',
+        fields: ['fullname', 'fathername', 'mothername', 'dob', 'age', 'married'],
+    },
+    {
+        name: 'Address Details',
+        fields: ['permanentaddress', 'currentaddress'],
+    },
+    {
+        name: 'Contact Information',
+        fields: ['mobileno', 'emergencymobileno', 'whatsappno'],
+    },
+    {
+        name: 'Bank Details',
+        fields: ['incomedetail', 'bankname', 'accountno', 'ifsccode'],
+    },
+    {
+        name: 'Identity Documents',
+        fields: ['aadharno', 'panno', 'licenseno'],
+    },
+    {
+        name: 'Other',
+        fields: ['salesmanid', 'createdat', 'updatedat'],
+    },
+];
+
+export default function SalesmanDetails({ cacheKey }) {
+    // Restore from cache if available
+    const cachedData = cacheKey ? getCache(cacheKey) : null;
+
+    const [salesmen, setSalesmen] = useState(cachedData?.salesmen || []);
+    const [loading, setLoading] = useState(!cachedData);
     const [selectedSalesman, setSelectedSalesman] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [isAddMode, setIsAddMode] = useState(false);
     const [formData, setFormData] = useState({});
 
-    // Add these states for image upload
+    // Image states
     const [imageFiles, setImageFiles] = useState({
         idproof: null,
         salesmansignature: null,
@@ -23,12 +80,37 @@ export default function SalesmanDetails() {
         ownersignature: null
     });
 
+    // Toast & confirmation popup states
+    const [toastMessage, setToastMessage] = useState('');
+    const [toastVisible, setToastVisible] = useState(false);
+    const [confirmVisible, setConfirmVisible] = useState(false);
+    const [confirmMessage, setConfirmMessage] = useState('');
+    const [confirmAction, setConfirmAction] = useState(null);
+
+    // Auto-dismiss toast after 5s
+    useEffect(() => {
+        if (!toastVisible) return;
+        const timer = setTimeout(() => setToastVisible(false), 5000);
+        return () => clearTimeout(timer);
+    }, [toastVisible]);
+
+    const showToast = useCallback((msg) => {
+        setToastMessage(msg);
+        setToastVisible(true);
+    }, []);
+
+    const showConfirm = useCallback((msg, action) => {
+        setConfirmMessage(msg);
+        setConfirmAction(() => action);
+        setConfirmVisible(true);
+    }, []);
+
     // Fetch all salesmen
-    const fetchSalesmen = async () => {
+    const fetchSalesmen = useCallback(async () => {
         setLoading(true);
         try {
             const result = await postData('employee/retrieve-salesman', {});
-            if (result && result.status) {
+            if (result?.status) {
                 setSalesmen(result.data);
             }
         } catch (error) {
@@ -36,14 +118,27 @@ export default function SalesmanDetails() {
         } finally {
             setLoading(false);
         }
-    };
-
-    useEffect(() => {
-        fetchSalesmen();
     }, []);
 
+    useEffect(() => {
+        if (!cachedData) {
+            fetchSalesmen();
+        }
+    }, [fetchSalesmen, cachedData]);
+
+    // Save state to cache before unmounting
+    useEffect(() => {
+        return () => {
+            if (cacheKey) {
+                saveCache(cacheKey, {
+                    salesmen,
+                });
+            }
+        };
+    }, [cacheKey, salesmen]);
+
     // Handle Add button click
-    const handleAddClick = () => {
+    const handleAddClick = useCallback(() => {
         setFormData({
             fullname: '',
             fathername: '',
@@ -64,33 +159,19 @@ export default function SalesmanDetails() {
             panno: '',
             licenseno: ''
         });
-        // Reset image states
-        setImageFiles({
-            idproof: null,
-            salesmansignature: null,
-            ownersignature: null
-        });
-        setImagePreviews({
-            idproof: null,
-            salesmansignature: null,
-            ownersignature: null
-        });
+        setImageFiles({ idproof: null, salesmansignature: null, ownersignature: null });
+        setImagePreviews({ idproof: null, salesmansignature: null, ownersignature: null });
         setIsAddMode(true);
         setIsEditMode(false);
         setSelectedSalesman(null);
         setIsModalOpen(true);
-    };
+    }, []);
 
-    // Handle card click
-    const handleCardClick = (salesman) => {
+    // Handle card click (view details)
+    const handleCardClick = useCallback((salesman) => {
         setSelectedSalesman(salesman);
         setFormData(salesman);
-        // Set image previews from existing data
-        setImageFiles({
-            idproof: null,
-            salesmansignature: null,
-            ownersignature: null
-        });
+        setImageFiles({ idproof: null, salesmansignature: null, ownersignature: null });
         setImagePreviews({
             idproof: salesman.idproof ? `${serverURL}/images/${salesman.idproof}` : null,
             salesmansignature: salesman.salesmansignature ? `${serverURL}/images/${salesman.salesmansignature}` : null,
@@ -99,22 +180,22 @@ export default function SalesmanDetails() {
         setIsEditMode(false);
         setIsAddMode(false);
         setIsModalOpen(true);
-    };
+    }, []);
 
-    // Handle edit button click
-    const handleEdit = () => {
+    // Handle edit button click inside modal
+    const handleEdit = useCallback(() => {
         setIsEditMode(true);
         setIsAddMode(false);
-    };
+    }, []);
 
     // Handle form input change
-    const handleInputChange = (e) => {
+    const handleInputChange = useCallback((e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
-    };
+    }, []);
 
-    // Handle image change
-    const handleImageChange = (e, fieldName) => {
+    // Handle image selection
+    const handleImageChange = useCallback((e, fieldName) => {
         const file = e.target.files[0];
         if (file) {
             setImageFiles(prev => ({ ...prev, [fieldName]: file }));
@@ -124,129 +205,106 @@ export default function SalesmanDetails() {
             };
             reader.readAsDataURL(file);
         }
-    };
+    }, []);
 
     // Handle remove image
-    const handleRemoveImage = (fieldName) => {
+    const handleRemoveImage = useCallback((fieldName) => {
         setImageFiles(prev => ({ ...prev, [fieldName]: null }));
         setImagePreviews(prev => ({ ...prev, [fieldName]: null }));
-    };
+    }, []);
 
-    // Handle save/update
-    const handleSave = async () => {
+    // Save (add or update)
+    const handleSave = useCallback(async () => {
         try {
-            let result;
             const formDataWithImages = new FormData();
-
-            // Append all form fields
             Object.keys(formData).forEach(key => {
                 if (formData[key] !== null && formData[key] !== '') {
                     formDataWithImages.append(key, formData[key]);
                 }
             });
+            if (imageFiles.idproof) formDataWithImages.append('idproof', imageFiles.idproof);
+            if (imageFiles.salesmansignature) formDataWithImages.append('salesmansignature', imageFiles.salesmansignature);
+            if (imageFiles.ownersignature) formDataWithImages.append('ownersignature', imageFiles.ownersignature);
 
-            // Append image files if they exist
-            if (imageFiles.idproof) {
-                formDataWithImages.append('idproof', imageFiles.idproof);
-            }
-            if (imageFiles.salesmansignature) {
-                formDataWithImages.append('salesmansignature', imageFiles.salesmansignature);
-            }
-            if (imageFiles.ownersignature) {
-                formDataWithImages.append('ownersignature', imageFiles.ownersignature);
-            }
-
+            let result;
             if (isAddMode) {
-                // Add new salesman
                 result = await postData('employee/insert-salesman', formDataWithImages);
-                if (result && result.status) {
-                    alert('Salesman added successfully!');
+                if (result?.status) {
+                    showToast('Salesman added successfully!');
                     setIsModalOpen(false);
                     fetchSalesmen();
                 } else {
-                    alert(result?.message || 'Failed to add salesman');
+                    showToast(result?.message || 'Failed to add salesman');
                 }
             } else {
-                // Update existing salesman
                 result = await postData('employee/update-salesman', formDataWithImages);
-                if (result && result.status) {
-                    alert('Salesman updated successfully!');
+                if (result?.status) {
+                    showToast('Salesman updated successfully!');
                     setIsEditMode(false);
                     fetchSalesmen();
                     const updated = await postData('employee/retrieve-salesman', { salesmanid: formData.salesmanid });
-                    if (updated && updated.status) {
-                        setSelectedSalesman(updated.data[0]);
-                        setFormData(updated.data[0]);
+                    if (updated?.status) {
+                        const updatedData = updated.data[0];
+                        setSelectedSalesman(updatedData);
+                        setFormData(updatedData);
                         setImagePreviews({
-                            idproof: updated.data[0].idproof ? `${serverURL}/images/${updated.data[0].idproof}` : null,
-                            salesmansignature: updated.data[0].salesmansignature ? `${serverURL}/images/${updated.data[0].salesmansignature}` : null,
-                            ownersignature: updated.data[0].ownersignature ? `${serverURL}/images/${updated.data[0].ownersignature}` : null
+                            idproof: updatedData.idproof ? `${serverURL}/images/${updatedData.idproof}` : null,
+                            salesmansignature: updatedData.salesmansignature ? `${serverURL}/images/${updatedData.salesmansignature}` : null,
+                            ownersignature: updatedData.ownersignature ? `${serverURL}/images/${updatedData.ownersignature}` : null
                         });
                     }
                 } else {
-                    alert(result?.message || 'Failed to update');
+                    showToast(result?.message || 'Failed to update');
                 }
             }
         } catch (error) {
             console.error('Error saving salesman:', error);
-            alert('Error saving salesman');
+            showToast('Error saving salesman');
         }
-    };
+    }, [formData, imageFiles, isAddMode, showToast, fetchSalesmen]);
 
-    // Handle delete
-    const handleDelete = async () => {
-        if (!confirm('Are you sure you want to delete this salesman?')) return;
-
+    // Delete – show confirmation popup then execute
+    const performDelete = useCallback(async () => {
         try {
             const result = await postData('employee/delete-salesman', { salesmanid: selectedSalesman.salesmanid });
-            if (result && result.status) {
-                alert('Salesman deleted successfully!');
+            if (result?.status) {
+                showToast('Salesman deleted successfully!');
                 setIsModalOpen(false);
                 fetchSalesmen();
             } else {
-                alert(result?.message || 'Failed to delete');
+                showToast(result?.message || 'Failed to delete');
             }
         } catch (error) {
             console.error('Error deleting salesman:', error);
-            alert('Error deleting salesman');
+            showToast('Error deleting salesman');
         }
-    };
+    }, [selectedSalesman, showToast, fetchSalesmen]);
 
-    // Render modal
-    const renderModal = () => {
+    const handleDelete = useCallback(() => {
+        showConfirm('Are you sure you want to delete this salesman?', performDelete);
+    }, [showConfirm, performDelete]);
+
+    // Cancel edit (reset to original)
+    const handleCancelEdit = useCallback(() => {
+        setIsEditMode(false);
+        setFormData(selectedSalesman);
+        setImagePreviews({
+            idproof: selectedSalesman.idproof ? `${serverURL}/images/${selectedSalesman.idproof}` : null,
+            salesmansignature: selectedSalesman.salesmansignature ? `${serverURL}/images/${selectedSalesman.salesmansignature}` : null,
+            ownersignature: selectedSalesman.ownersignature ? `${serverURL}/images/${selectedSalesman.ownersignature}` : null
+        });
+    }, [selectedSalesman]);
+
+    // Render Modal
+    const renderModal = useCallback(() => {
         if (!isModalOpen) return null;
-
-        const fields = [
-            { key: 'salesmanid', label: 'Salesman ID', editable: false, addMode: false },
-            { key: 'fullname', label: 'Full Name', editable: true, addMode: true },
-            { key: 'fathername', label: 'Father Name', editable: true, addMode: true },
-            { key: 'mothername', label: 'Mother Name', editable: true, addMode: true },
-            { key: 'dob', label: 'Date of Birth', editable: true, addMode: true, type: 'date' },
-            { key: 'age', label: 'Age', editable: true, addMode: true, type: 'number' },
-            { key: 'married', label: 'Married', editable: true, addMode: true, type: 'select', options: ['Yes', 'No'] },
-            { key: 'permanentaddress', label: 'Permanent Address', editable: true, addMode: true },
-            { key: 'currentaddress', label: 'Current Address', editable: true, addMode: true },
-            { key: 'mobileno', label: 'Mobile Number', editable: true, addMode: true },
-            { key: 'emergencymobileno', label: 'Emergency Mobile', editable: true, addMode: true },
-            { key: 'whatsappno', label: 'WhatsApp Number', editable: true, addMode: true },
-            { key: 'incomedetail', label: 'Income Detail', editable: true, addMode: true, type: 'number' },
-            { key: 'bankname', label: 'Bank Name', editable: true, addMode: true },
-            { key: 'accountno', label: 'Account Number', editable: true, addMode: true },
-            { key: 'ifsccode', label: 'IFSC Code', editable: true, addMode: true },
-            { key: 'aadharno', label: 'Aadhar Number', editable: true, addMode: true },
-            { key: 'panno', label: 'PAN Number', editable: true, addMode: true },
-            { key: 'licenseno', label: 'License Number', editable: true, addMode: true },
-            { key: 'createdat', label: 'Created At', editable: false, addMode: false },
-            { key: 'updatedat', label: 'Updated At', editable: false, addMode: false },
-        ];
-
         const isEditable = isEditMode || isAddMode;
 
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                     {/* Modal Header */}
-                    <div className={`px-6 py-4 flex justify-between items-center ${isAddMode ? 'bg-gradient-to-r from-emerald-600 to-emerald-700' : 'bg-gradient-to-r from-blue-600 to-blue-700'}`}>
+                    <div className={`px-6 py-4 flex justify-between items-center flex-shrink-0 ${isAddMode ? 'bg-gradient-to-r from-emerald-600 to-emerald-700' : 'bg-gradient-to-r from-blue-600 to-blue-700'}`}>
                         <div className="flex items-center gap-3">
                             <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-white text-xl font-bold">
                                 {isAddMode ? '+' : (selectedSalesman?.fullname ? selectedSalesman.fullname.charAt(0).toUpperCase() : '?')}
@@ -260,7 +318,7 @@ export default function SalesmanDetails() {
                         </div>
                         <button
                             onClick={() => setIsModalOpen(false)}
-                            className="text-white hover:text-gray-200 transition-colors"
+                            className="text-white hover:text-gray-200 transition-colors cursor-pointer"
                         >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -269,221 +327,217 @@ export default function SalesmanDetails() {
                     </div>
 
                     {/* Modal Body */}
-                    <div className="overflow-y-auto p-6 max-h-[calc(90vh-120px)]">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {fields.map((field) => {
-                                if (isAddMode && !field.addMode) return null;
+                    <div className="overflow-y-auto p-6 flex-1" style={{ maxHeight: 'calc(90vh - 180px)' }}>
+                        {CATEGORIES.map(category => {
+                            const categoryFields = FIELDS.filter(f => category.fields.includes(f.key) && (!isAddMode || f.addMode));
+                            if (categoryFields.length === 0) return null;
 
-                                const value = formData[field.key] || '';
-                                const isFieldEditable = isEditable && field.editable;
+                            return (
+                                <div key={category.name} className="mb-6">
+                                    <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b-2 border-black pb-2 mb-3">
+                                        {category.name}
+                                    </h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {categoryFields.map(field => {
+                                            const value = formData[field.key] || '';
+                                            const isFieldEditable = isEditable && field.editable;
 
-                                return (
-                                    <div key={field.key} className="space-y-1">
-                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            {field.label}
-                                        </label>
-                                        {isFieldEditable ? (
-                                            field.type === 'select' ? (
-                                                <select
-                                                    name={field.key}
-                                                    value={value}
-                                                    onChange={handleInputChange}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                            return (
+                                                <div key={field.key} className="space-y-1">
+                                                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        {field.label}
+                                                    </label>
+                                                    {isFieldEditable ? (
+                                                        field.type === 'select' ? (
+                                                            <select
+                                                                name={field.key}
+                                                                value={value}
+                                                                onChange={handleInputChange}
+                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm cursor-pointer"
+                                                            >
+                                                                <option value="">Select</option>
+                                                                {field.options.map(opt => (
+                                                                    <option key={opt} value={opt}>{opt}</option>
+                                                                ))}
+                                                            </select>
+                                                        ) : (
+                                                            <input
+                                                                type={field.type || 'text'}
+                                                                name={field.key}
+                                                                value={value}
+                                                                onChange={handleInputChange}
+                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                                            />
+                                                        )
+                                                    ) : (
+                                                        <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
+                                                            {value || '-'}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })}
+
+                        {/* Image Upload / View */}
+                        {(isAddMode || isEditMode) && (
+                            <div className="mb-6">
+                                <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2 mb-3">
+                                    Picture Upload
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {/* ID Proof */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">ID Proof</label>
+                                        {imagePreviews.idproof ? (
+                                            <div className="relative">
+                                                <img src={imagePreviews.idproof} alt="ID Proof" className="w-full h-32 object-cover rounded-lg border border-gray-200" />
+                                                <button
+                                                    onClick={() => handleRemoveImage('idproof')}
+                                                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 cursor-pointer"
                                                 >
-                                                    <option value="">Select</option>
-                                                    {field.options.map(opt => (
-                                                        <option key={opt} value={opt}>{opt}</option>
-                                                    ))}
-                                                </select>
-                                            ) : (
-                                                <input
-                                                    type={field.type || 'text'}
-                                                    name={field.key}
-                                                    value={value}
-                                                    onChange={handleInputChange}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                                />
-                                            )
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
                                         ) : (
-                                            <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
-                                                {value || '-'}
+                                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
+                                                <input
+                                                    type="file" accept="image/*"
+                                                    onChange={(e) => handleImageChange(e, 'idproof')}
+                                                    className="hidden" id="idproof-upload"
+                                                />
+                                                <label htmlFor="idproof-upload" className="cursor-pointer">
+                                                    <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+                                                    <p className="text-sm text-gray-500 mt-1">Click to upload</p>
+                                                </label>
                                             </div>
                                         )}
                                     </div>
-                                );
-                            })}
-                        </div>
 
-                        {/* Image Upload Fields - Show in Add and Edit mode */}
-                        {(isAddMode || isEditMode) && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 border-t pt-4">
-                                {/* ID Proof Upload */}
-                                <div className="space-y-2">
-                                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">ID Proof</label>
-                                    {imagePreviews.idproof ? (
-                                        <div className="relative">
-                                            <img
-                                                src={imagePreviews.idproof}
-                                                alt="ID Proof"
-                                                className="w-full h-32 object-cover rounded-lg border border-gray-200"
-                                            />
-                                            <button
-                                                onClick={() => handleRemoveImage('idproof')}
-                                                className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={(e) => handleImageChange(e, 'idproof')}
-                                                className="hidden"
-                                                id="idproof-upload"
-                                            />
-                                            <label htmlFor="idproof-upload" className="cursor-pointer">
-                                                <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                </svg>
-                                                <p className="text-sm text-gray-500 mt-1">Click to upload</p>
-                                            </label>
-                                        </div>
-                                    )}
-                                </div>
+                                    {/* Salesman Signature */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman Signature</label>
+                                        {imagePreviews.salesmansignature ? (
+                                            <div className="relative">
+                                                <img src={imagePreviews.salesmansignature} alt="Signature" className="w-full h-32 object-cover rounded-lg border border-gray-200" />
+                                                <button
+                                                    onClick={() => handleRemoveImage('salesmansignature')}
+                                                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 cursor-pointer"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
+                                                <input
+                                                    type="file" accept="image/*"
+                                                    onChange={(e) => handleImageChange(e, 'salesmansignature')}
+                                                    className="hidden" id="signature-upload"
+                                                />
+                                                <label htmlFor="signature-upload" className="cursor-pointer">
+                                                    <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                    </svg>
+                                                    <p className="text-sm text-gray-500 mt-1">Click to upload</p>
+                                                </label>
+                                            </div>
+                                        )}
+                                    </div>
 
-                                {/* Salesman Signature Upload */}
-                                <div className="space-y-2">
-                                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman Signature</label>
-                                    {imagePreviews.salesmansignature ? (
-                                        <div className="relative">
-                                            <img
-                                                src={imagePreviews.salesmansignature}
-                                                alt="Salesman Signature"
-                                                className="w-full h-32 object-cover rounded-lg border border-gray-200"
-                                            />
-                                            <button
-                                                onClick={() => handleRemoveImage('salesmansignature')}
-                                                className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={(e) => handleImageChange(e, 'salesmansignature')}
-                                                className="hidden"
-                                                id="signature-upload"
-                                            />
-                                            <label htmlFor="signature-upload" className="cursor-pointer">
-                                                <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                                </svg>
-                                                <p className="text-sm text-gray-500 mt-1">Click to upload</p>
-                                            </label>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Owner Signature Upload */}
-                                <div className="space-y-2">
-                                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Owner Signature</label>
-                                    {imagePreviews.ownersignature ? (
-                                        <div className="relative">
-                                            <img
-                                                src={imagePreviews.ownersignature}
-                                                alt="Owner Signature"
-                                                className="w-full h-32 object-cover rounded-lg border border-gray-200"
-                                            />
-                                            <button
-                                                onClick={() => handleRemoveImage('ownersignature')}
-                                                className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={(e) => handleImageChange(e, 'ownersignature')}
-                                                className="hidden"
-                                                id="owner-signature-upload"
-                                            />
-                                            <label htmlFor="owner-signature-upload" className="cursor-pointer">
-                                                <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                                </svg>
-                                                <p className="text-sm text-gray-500 mt-1">Click to upload</p>
-                                            </label>
-                                        </div>
-                                    )}
+                                    {/* Owner Signature */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Owner Signature</label>
+                                        {imagePreviews.ownersignature ? (
+                                            <div className="relative">
+                                                <img src={imagePreviews.ownersignature} alt="Owner Signature" className="w-full h-32 object-cover rounded-lg border border-gray-200" />
+                                                <button
+                                                    onClick={() => handleRemoveImage('ownersignature')}
+                                                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 cursor-pointer"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
+                                                <input
+                                                    type="file" accept="image/*"
+                                                    onChange={(e) => handleImageChange(e, 'ownersignature')}
+                                                    className="hidden" id="owner-signature-upload"
+                                                />
+                                                <label htmlFor="owner-signature-upload" className="cursor-pointer">
+                                                    <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                    </svg>
+                                                    <p className="text-sm text-gray-500 mt-1">Click to upload</p>
+                                                </label>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* View Mode - Show existing images as links */}
+                        {/* View Mode - Existing Images as Links */}
                         {!isAddMode && !isEditMode && selectedSalesman && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 border-t pt-4">
-                                {selectedSalesman.idproof && (
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">ID Proof</label>
-                                        <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
-                                            <a href={`${serverURL}/images/${selectedSalesman.idproof}`} target="_blank" className="text-blue-600 hover:underline">
-                                                View ID Proof
-                                            </a>
+                            <div className="mb-6">
+                                <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2 mb-3">
+                                    Uploaded Images
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {selectedSalesman.idproof && (
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">ID Proof</label>
+                                            <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
+                                                <a href={`${serverURL}/images/${selectedSalesman.idproof}`} target="_blank" className="text-blue-600 hover:underline cursor-pointer">
+                                                    View ID Proof
+                                                </a>
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
-                                {selectedSalesman.salesmansignature && (
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman Signature</label>
-                                        <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
-                                            <a href={`${serverURL}/images/${selectedSalesman.salesmansignature}`} target="_blank" className="text-blue-600 hover:underline">
-                                                View Signature
-                                            </a>
+                                    )}
+                                    {selectedSalesman.salesmansignature && (
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman Signature</label>
+                                            <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
+                                                <a href={`${serverURL}/images/${selectedSalesman.salesmansignature}`} target="_blank" className="text-blue-600 hover:underline cursor-pointer">
+                                                    View Signature
+                                                </a>
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
-                                {selectedSalesman.ownersignature && (
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Owner Signature</label>
-                                        <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
-                                            <a href={`${serverURL}/images/${selectedSalesman.ownersignature}`} target="_blank" className="text-blue-600 hover:underline">
-                                                View Signature
-                                            </a>
+                                    )}
+                                    {selectedSalesman.ownersignature && (
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Owner Signature</label>
+                                            <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
+                                                <a href={`${serverURL}/images/${selectedSalesman.ownersignature}`} target="_blank" className="text-blue-600 hover:underline cursor-pointer">
+                                                    View Signature
+                                                </a>
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
 
                     {/* Modal Footer */}
-                    <div className="border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
+                    <div className="border-t-2 border-gray-200 px-6 py-5 flex justify-end gap-3 items-center bg-gray-50 flex-shrink-0">
                         {isAddMode ? (
                             <>
-                                <button
-                                    onClick={handleSave}
-                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
-                                >
+                                <button onClick={handleSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer">
                                     Add Salesman
                                 </button>
-                                <button
-                                    onClick={() => setIsModalOpen(false)}
-                                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
-                                >
+                                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer">
                                     Cancel
                                 </button>
                             </>
@@ -491,45 +545,22 @@ export default function SalesmanDetails() {
                             <>
                                 {!isEditMode ? (
                                     <>
-                                        <button
-                                            onClick={handleEdit}
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                                        >
+                                        <button onClick={handleEdit} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer">
                                             Edit
                                         </button>
-                                        <button
-                                            onClick={handleDelete}
-                                            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-                                        >
+                                        <button onClick={handleDelete} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors cursor-pointer">
                                             Delete
                                         </button>
-                                        <button
-                                            onClick={() => setIsModalOpen(false)}
-                                            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
-                                        >
+                                        <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer">
                                             Close
                                         </button>
                                     </>
                                 ) : (
                                     <>
-                                        <button
-                                            onClick={handleSave}
-                                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
-                                        >
+                                        <button onClick={handleSave} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors cursor-pointer">
                                             Save Changes
                                         </button>
-                                        <button
-                                            onClick={() => {
-                                                setIsEditMode(false);
-                                                setFormData(selectedSalesman);
-                                                setImagePreviews({
-                                                    idproof: selectedSalesman.idproof ? `${serverURL}/images/${selectedSalesman.idproof}` : null,
-                                                    salesmansignature: selectedSalesman.salesmansignature ? `${serverURL}/images/${selectedSalesman.salesmansignature}` : null,
-                                                    ownersignature: selectedSalesman.ownersignature ? `${serverURL}/images/${selectedSalesman.ownersignature}` : null
-                                                });
-                                            }}
-                                            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
-                                        >
+                                        <button onClick={handleCancelEdit} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer">
                                             Cancel
                                         </button>
                                     </>
@@ -540,10 +571,10 @@ export default function SalesmanDetails() {
                 </div>
             </div>
         );
-    };
+    }, [isModalOpen, isAddMode, isEditMode, selectedSalesman, formData, imagePreviews, handleInputChange, handleImageChange, handleRemoveImage, handleSave, handleEdit, handleDelete, handleCancelEdit]);
 
     // Render salesman cards
-    const renderSalesmanCards = () => {
+    const renderSalesmanCards = useCallback(() => {
         if (loading) {
             return (
                 <div className="flex justify-center items-center h-64">
@@ -562,7 +593,7 @@ export default function SalesmanDetails() {
 
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-                {salesmen.map((salesman) => (
+                {salesmen.map(salesman => (
                     <div
                         key={salesman.salesmanid}
                         onClick={() => handleCardClick(salesman)}
@@ -595,10 +626,50 @@ export default function SalesmanDetails() {
                 ))}
             </div>
         );
-    };
+    }, [salesmen, loading, handleCardClick]);
 
     return (
         <div>
+            {/* Toast Notification */}
+            {toastVisible && (
+                <div className="fixed top-4 right-4 z-50 bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
+                    <span>{toastMessage}</span>
+                    <button
+                        onClick={() => setToastVisible(false)}
+                        className="text-white hover:text-gray-200 font-bold text-lg leading-none cursor-pointer"
+                    >
+                        ×
+                    </button>
+                </div>
+            )}
+
+            {/* Confirmation Popup */}
+            {confirmVisible && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-96 max-w-[90%]">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Confirm Action</h3>
+                        <p className="text-sm text-gray-600 mb-6">{confirmMessage}</p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setConfirmVisible(false)}
+                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors text-sm font-medium cursor-pointer"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (confirmAction) confirmAction();
+                                    setConfirmVisible(false);
+                                }}
+                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer"
+                            >
+                                Confirm
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="mb-8 flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-semibold text-gray-900">Salesman Details</h2>
@@ -606,7 +677,7 @@ export default function SalesmanDetails() {
                 </div>
                 <button
                     onClick={handleAddClick}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />

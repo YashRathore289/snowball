@@ -1,356 +1,247 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('./pool'); // Your database connection
+const pool = require('./pool');                 // your DB connection
+const rateLimiter = require('./rateLimiter'); // adjust path
 
-// ==================== 1. SELECT (Retrieve) API ====================
-router.post("/retrieve-attendance", function (req, res, next) {
+// Global rate limit for all attendance routes: 100 requests per 15 minutes
+router.use(rateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: 'Too many requests, please try again after 15 minutes.'
+}));
+
+// ==================== 1. RETRIEVE ATTENDANCE ====================
+router.post("/retrieve-attendance", async (req, res) => {
     try {
-        const { attendanceid, salesmanid, attendance_date, month, year } = req.body;
+        const { attendance_date, month, year } = req.body;
 
         let query;
         let values = [];
 
-        if (attendanceid) {
-            // Get single attendance by ID
+        if (attendance_date) {
+            // Daily view: get all records for this date
             query = `SELECT 
-                sa.attendanceid,
-                sa.salesmanid,
-                s.fullname as salesman_name,
-                DATE_FORMAT(sa.attendance_date, '%Y-%m-%d') as attendance_date,
-                sa.status,
-                DATE_FORMAT(sa.createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                DATE_FORMAT(sa.updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                FROM salesman_attendance sa
-                LEFT JOIN salesman s ON sa.salesmanid = s.salesmanid
-                WHERE sa.attendanceid = ?`;
-            values = [attendanceid];
-        } else if (salesmanid && attendance_date) {
-            // Get attendance for specific salesman on specific date
-            query = `SELECT 
-                sa.attendanceid,
-                sa.salesmanid,
-                s.fullname as salesman_name,
-                DATE_FORMAT(sa.attendance_date, '%Y-%m-%d') as attendance_date,
-                sa.status,
-                DATE_FORMAT(sa.createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                DATE_FORMAT(sa.updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                FROM salesman_attendance sa
-                LEFT JOIN salesman s ON sa.salesmanid = s.salesmanid
-                WHERE sa.salesmanid = ? AND sa.attendance_date = ?`;
-            values = [salesmanid, attendance_date];
-        } else if (salesmanid) {
-            // Get attendance for specific salesman
-            query = `SELECT 
-                sa.attendanceid,
-                sa.salesmanid,
-                s.fullname as salesman_name,
-                DATE_FORMAT(sa.attendance_date, '%Y-%m-%d') as attendance_date,
-                sa.status,
-                DATE_FORMAT(sa.createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                DATE_FORMAT(sa.updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                FROM salesman_attendance sa
-                LEFT JOIN salesman s ON sa.salesmanid = s.salesmanid
-                WHERE sa.salesmanid = ?
-                ORDER BY sa.attendance_date DESC`;
-            values = [salesmanid];
+        sa.attendanceid,
+        sa.salesmanid,
+        s.fullname AS salesman_name,
+        DATE_FORMAT(sa.attendance_date, '%Y-%m-%d') AS attendance_date,
+        sa.status
+      FROM salesman_attendance sa
+      LEFT JOIN salesman s ON sa.salesmanid = s.salesmanid
+      WHERE sa.attendance_date = ?
+      ORDER BY s.fullname`;
+            values = [attendance_date];
         } else if (month && year) {
-            // Get attendance for specific month/year
+            // Monthly view: get all records for the whole month
             query = `SELECT 
-                sa.attendanceid,
-                sa.salesmanid,
-                s.fullname as salesman_name,
-                DATE_FORMAT(sa.attendance_date, '%Y-%m-%d') as attendance_date,
-                sa.status,
-                DATE_FORMAT(sa.createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                DATE_FORMAT(sa.updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                FROM salesman_attendance sa
-                LEFT JOIN salesman s ON sa.salesmanid = s.salesmanid
-                WHERE MONTH(sa.attendance_date) = ? AND YEAR(sa.attendance_date) = ?
-                ORDER BY sa.attendance_date DESC, s.fullname`;
+        sa.attendanceid,
+        sa.salesmanid,
+        s.fullname AS salesman_name,
+        DATE_FORMAT(sa.attendance_date, '%Y-%m-%d') AS attendance_date,
+        sa.status
+      FROM salesman_attendance sa
+      LEFT JOIN salesman s ON sa.salesmanid = s.salesmanid
+      WHERE MONTH(sa.attendance_date) = ? AND YEAR(sa.attendance_date) = ?
+      ORDER BY sa.attendance_date DESC, s.fullname`;
             values = [month, year];
         } else {
-            // Get all attendance records
-            query = `SELECT 
-                sa.attendanceid,
-                sa.salesmanid,
-                s.fullname as salesman_name,
-                DATE_FORMAT(sa.attendance_date, '%Y-%m-%d') as attendance_date,
-                sa.status,
-                DATE_FORMAT(sa.createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                DATE_FORMAT(sa.updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                FROM salesman_attendance sa
-                LEFT JOIN salesman s ON sa.salesmanid = s.salesmanid
-                ORDER BY sa.attendance_date DESC, s.fullname`;
+            return res.status(400).json({
+                status: false,
+                message: "Either attendance_date or (month and year) is required"
+            });
         }
 
-        pool.query(query, values, function (error, result) {
+        pool.query(query, values, (error, result) => {
             if (error) {
-                console.log(error);
-                res.status(500).json({
-                    status: false,
-                    message: "Database Error...",
-                    error: error.sqlMessage
-                });
-            } else {
-                if (attendanceid && result.length === 0) {
-                    return res.status(404).json({
-                        status: false,
-                        message: "Attendance record not found",
-                        data: []
-                    });
-                }
-                return res.status(200).json({
-                    status: true,
-                    message: "Success",
-                    count: result.length,
-                    data: result
-                });
+                console.error(error);
+                return res.status(500).json({ status: false, message: "Database Error" });
             }
+            res.status(200).json({
+                status: true,
+                message: "Success",
+                count: result.length,
+                data: result
+            });
         });
     } catch (e) {
-        console.log(e);
-        res.status(500).json({ status: false, message: "Technical Issue..." });
+        console.error(e);
+        res.status(500).json({ status: false, message: "Technical Issue" });
     }
 });
 
-// ==================== 2. INSERT or UPDATE API (Mark Attendance) ====================
-router.post("/mark-attendance", function (req, res, next) {
+// ==================== 2. MARK ATTENDANCE (upsert) ====================
+// Stricter limit: 10 requests per minute per IP
+router.post("/mark-attendance", rateLimiter({
+    windowMs: 60 * 1000,
+    max: 10,
+    message: 'Too many mark requests. Please slow down.'
+}), async (req, res) => {
     try {
         const { salesmanid, attendance_date, status } = req.body;
 
-        if (!salesmanid || !attendance_date) {
+        if (!salesmanid || !attendance_date || !status) {
             return res.status(400).json({
                 status: false,
-                message: "Salesman ID and Date are required"
+                message: "salesmanid, attendance_date and status are required"
             });
         }
 
-        // Check if salesman exists
-        const checkSalesman = "SELECT salesmanid FROM salesman WHERE salesmanid = ?";
-        pool.query(checkSalesman, [salesmanid], function (err, result) {
+        // Validate salesman exists
+        pool.query("SELECT salesmanid FROM salesman WHERE salesmanid = ?", [salesmanid], (err, result) => {
             if (err) {
-                console.log(err);
-                return res.status(500).json({
-                    status: false,
-                    message: "Database Error...",
-                    error: err.sqlMessage
-                });
+                console.error(err);
+                return res.status(500).json({ status: false, message: "Database Error" });
             }
-
             if (result.length === 0) {
-                return res.status(404).json({
-                    status: false,
-                    message: "Salesman not found"
-                });
+                return res.status(404).json({ status: false, message: "Salesman not found" });
             }
 
-            // Check if attendance already exists for this date
+            // Check if attendance already exists for this salesman + date
             const checkQuery = "SELECT attendanceid FROM salesman_attendance WHERE salesmanid = ? AND attendance_date = ?";
-            pool.query(checkQuery, [salesmanid, attendance_date], function (err, checkResult) {
+            pool.query(checkQuery, [salesmanid, attendance_date], (err, checkResult) => {
                 if (err) {
-                    console.log(err);
-                    return res.status(500).json({
-                        status: false,
-                        message: "Database Error...",
-                        error: err.sqlMessage
-                    });
+                    console.error(err);
+                    return res.status(500).json({ status: false, message: "Database Error" });
                 }
 
                 if (checkResult.length > 0) {
-                    // Update existing attendance
+                    // Update
                     const updateQuery = "UPDATE salesman_attendance SET status = ?, updatedat = NOW() WHERE salesmanid = ? AND attendance_date = ?";
-                    pool.query(updateQuery, [status, salesmanid, attendance_date], function (err, updateResult) {
+                    pool.query(updateQuery, [status, salesmanid, attendance_date], (err) => {
                         if (err) {
-                            console.log(err);
-                            return res.status(500).json({
-                                status: false,
-                                message: "Database Error...",
-                                error: err.sqlMessage
-                            });
+                            console.error(err);
+                            return res.status(500).json({ status: false, message: "Database Error" });
                         }
-
-                        return res.status(200).json({
-                            status: true,
-                            message: "Attendance updated successfully",
-                            data: {
-                                salesmanid: salesmanid,
-                                attendance_date: attendance_date,
-                                status: status
-                            }
-                        });
+                        return res.status(200).json({ status: true, message: "Attendance updated successfully" });
                     });
                 } else {
-                    // Insert new attendance
+                    // Insert
                     const insertQuery = "INSERT INTO salesman_attendance (salesmanid, attendance_date, status, createdat, updatedat) VALUES (?, ?, ?, NOW(), NOW())";
-                    pool.query(insertQuery, [salesmanid, attendance_date, status], function (err, insertResult) {
+                    pool.query(insertQuery, [salesmanid, attendance_date, status], (err, insertResult) => {
                         if (err) {
-                            console.log(err);
-                            return res.status(500).json({
-                                status: false,
-                                message: "Database Error...",
-                                error: err.sqlMessage
-                            });
+                            console.error(err);
+                            return res.status(500).json({ status: false, message: "Database Error" });
                         }
-
                         return res.status(200).json({
                             status: true,
                             message: "Attendance marked successfully",
-                            data: {
-                                attendanceid: insertResult.insertId,
-                                salesmanid: salesmanid,
-                                attendance_date: attendance_date,
-                                status: status
-                            }
+                            data: { attendanceid: insertResult.insertId, salesmanid, attendance_date, status }
                         });
                     });
                 }
             });
         });
     } catch (e) {
-        console.log(e);
-        res.status(500).json({ status: false, message: "Technical Issue..." });
+        console.error(e);
+        res.status(500).json({ status: false, message: "Technical Issue" });
     }
 });
 
-// ==================== 3. DELETE API ====================
-router.post("/delete-attendance", function (req, res, next) {
+// ==================== 3. DELETE ATTENDANCE ====================
+router.post("/delete-attendance", async (req, res) => {
     try {
         const { attendanceid } = req.body;
-
         if (!attendanceid) {
-            return res.status(400).json({
-                status: false,
-                message: "Attendance ID is required"
-            });
+            return res.status(400).json({ status: false, message: "attendanceid is required" });
         }
 
-        const selectQuery = `SELECT 
-            attendanceid,
-            salesmanid,
-            DATE_FORMAT(attendance_date, '%Y-%m-%d') as attendance_date,
-            status
-            FROM salesman_attendance WHERE attendanceid = ?`;
-
-        pool.query(selectQuery, [attendanceid], function (error, result) {
-            if (error) {
-                console.log(error);
-                return res.status(500).json({
-                    status: false,
-                    message: "Database Error...",
-                    error: error.sqlMessage
-                });
+        const selectQuery = "SELECT * FROM salesman_attendance WHERE attendanceid = ?";
+        pool.query(selectQuery, [attendanceid], (err, result) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ status: false, message: "Database Error" });
             }
-
             if (result.length === 0) {
-                return res.status(404).json({
-                    status: false,
-                    message: "Attendance record not found"
-                });
+                return res.status(404).json({ status: false, message: "Attendance record not found" });
             }
 
-            const attendanceData = result[0];
             const deleteQuery = "DELETE FROM salesman_attendance WHERE attendanceid = ?";
-
-            pool.query(deleteQuery, [attendanceid], function (error, deleteResult) {
-                if (error) {
-                    console.log(error);
-                    return res.status(500).json({
-                        status: false,
-                        message: "Database Error...",
-                        error: error.sqlMessage
-                    });
+            pool.query(deleteQuery, [attendanceid], (err) => {
+                if (err) {
+                    console.error(err);
+                    return res.status(500).json({ status: false, message: "Database Error" });
                 }
-
-                return res.status(200).json({
-                    status: true,
-                    message: "Attendance record deleted successfully",
-                    data: attendanceData
-                });
+                return res.status(200).json({ status: true, message: "Attendance deleted successfully" });
             });
         });
     } catch (e) {
-        console.log(e);
-        res.status(500).json({ status: false, message: "Technical Issue..." });
+        console.error(e);
+        res.status(500).json({ status: false, message: "Technical Issue" });
     }
 });
 
-// ==================== 4. GET ATTENDANCE SUMMARY ====================
-router.post("/attendance-summary", function (req, res, next) {
+// ==================== BATCH MARK ATTENDANCE ====================
+router.post("/mark-attendance-batch", rateLimiter({
+    windowMs: 60 * 1000,      // 1 minute
+    max: 5,                   // allow 5 batch calls per minute (enough)
+    message: 'Too many batch requests. Please slow down.'
+}), (req, res) => {
     try {
-        const { salesmanid, month, year } = req.body;
+        const { records, attendance_date } = req.body;
+        // records = [ { salesmanid: 1, status: 'Present' }, { salesmanid: 2, status: 'Absent' } ]
 
-        if (!salesmanid || !month || !year) {
-            return res.status(400).json({
-                status: false,
-                message: "Salesman ID, Month, and Year are required"
-            });
+        if (!Array.isArray(records) || records.length === 0 || !attendance_date) {
+            return res.status(400).json({ status: false, message: "records array and attendance_date are required" });
         }
 
-        const query = `SELECT 
-            DATE_FORMAT(attendance_date, '%Y-%m-%d') as date,
-            status
-            FROM salesman_attendance
-            WHERE salesmanid = ? AND MONTH(attendance_date) = ? AND YEAR(attendance_date) = ?
-            ORDER BY attendance_date`;
+        // Validate all salesman IDs exist first (optional but nice)
+        const salesmenIds = records.map(r => r.salesmanid);
+        pool.query(
+            "SELECT salesmanid FROM salesman WHERE salesmanid IN (?)",
+            [salesmenIds],
+            (err, results) => {
+                if (err) {
+                    console.error(err);
+                    return res.status(500).json({ status: false, message: "Database Error" });
+                }
+                // Process each record: upsert
+                let completed = 0;
+                const total = records.length;
+                const errors = [];
 
-        pool.query(query, [salesmanid, month, year], function (error, result) {
-            if (error) {
-                console.log(error);
-                return res.status(500).json({
-                    status: false,
-                    message: "Database Error...",
-                    error: error.sqlMessage
+                records.forEach(record => {
+                    const { salesmanid, status } = record;
+                    // First check if attendance exists
+                    const checkQuery = "SELECT attendanceid FROM salesman_attendance WHERE salesmanid = ? AND attendance_date = ?";
+                    pool.query(checkQuery, [salesmanid, attendance_date], (err, checkResult) => {
+                        if (err) {
+                            errors.push({ salesmanid, error: err.sqlMessage });
+                            completed++;
+                            if (completed === total) finish();
+                            return;
+                        }
+
+                        if (checkResult.length > 0) {
+                            // Update
+                            const updateQuery = "UPDATE salesman_attendance SET status = ?, updatedat = NOW() WHERE salesmanid = ? AND attendance_date = ?";
+                            pool.query(updateQuery, [status, salesmanid, attendance_date], (err) => {
+                                if (err) errors.push({ salesmanid, error: err.sqlMessage });
+                                completed++;
+                                if (completed === total) finish();
+                            });
+                        } else {
+                            // Insert
+                            const insertQuery = "INSERT INTO salesman_attendance (salesmanid, attendance_date, status, createdat, updatedat) VALUES (?, ?, ?, NOW(), NOW())";
+                            pool.query(insertQuery, [salesmanid, attendance_date, status], (err) => {
+                                if (err) errors.push({ salesmanid, error: err.sqlMessage });
+                                completed++;
+                                if (completed === total) finish();
+                            });
+                        }
+                    });
                 });
+
+                function finish() {
+                    if (errors.length > 0) {
+                        return res.status(200).json({ status: true, message: "Batch processed with some errors", errors });
+                    }
+                    return res.status(200).json({ status: true, message: `Batch updated ${total} records successfully` });
+                }
             }
-
-            // Calculate summary
-            let present = 0;
-            let absent = 0;
-            let halfDay = 0;
-            let holiday = 0;
-            let leave = 0;
-
-            result.forEach(record => {
-                switch(record.status) {
-                    case 'Present':
-                        present++;
-                        break;
-                    case 'Absent':
-                        absent++;
-                        break;
-                    case 'Half Day':
-                        halfDay++;
-                        break;
-                    case 'Holiday':
-                        holiday++;
-                        break;
-                    case 'Leave':
-                        leave++;
-                        break;
-                }
-            });
-
-            const totalDays = result.length;
-            const attendancePercentage = totalDays > 0 ? ((present + halfDay * 0.5) / totalDays * 100).toFixed(2) : 0;
-
-            return res.status(200).json({
-                status: true,
-                message: "Success",
-                data: {
-                    totalDays: totalDays,
-                    present: present,
-                    absent: absent,
-                    halfDay: halfDay,
-                    holiday: holiday,
-                    leave: leave,
-                    attendancePercentage: attendancePercentage,
-                    records: result
-                }
-            });
-        });
+        );
     } catch (e) {
-        console.log(e);
-        res.status(500).json({ status: false, message: "Technical Issue..." });
+        console.error(e);
+        res.status(500).json({ status: false, message: "Technical Issue" });
     }
 });
 

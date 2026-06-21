@@ -1,271 +1,155 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('./pool'); // Your database connection
+const pool = require('./pool');               // your DB connection
+const rateLimiter = require('./ratelimiter');  // import the rate limiter
 
-// ==================== 1. SELECT (Retrieve) API ====================
-router.post("/retrieve-batteries", function (req, res, next) {
+// Apply global rate limit: 100 requests per 15 min per IP
+router.use(rateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: 'Too many requests, please try again after 15 minutes.'
+}));
+
+// ==================== 1. RETRIEVE ALL BATTERIES ====================
+router.post("/retrieve-batteries", (req, res) => {
     try {
-        const { batteryid } = req.body;
+        const query = `SELECT 
+            batteryid,
+            batteryname,
+            DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
+            DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') AS updatedat
+        FROM batteries 
+        ORDER BY batteryname`;
 
-        let query;
-        let values = [];
-
-        if (batteryid) {
-            // Get single battery by ID
-            query = `SELECT 
-                batteryid,
-                batteryname,
-                DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                FROM batteries WHERE batteryid = ?`;
-            values = [batteryid];
-        } else {
-            // Get all batteries
-            query = `SELECT 
-                batteryid,
-                batteryname,
-                DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                FROM batteries ORDER BY batteryname`;
-        }
-
-        pool.query(query, values, function (error, result) {
+        pool.query(query, (error, result) => {
             if (error) {
-                console.log(error);
-                res.status(500).json({
-                    status: false,
-                    message: "Database Error...",
-                    error: error.sqlMessage
-                });
-            } else {
-                if (batteryid && result.length === 0) {
-                    return res.status(404).json({
-                        status: false,
-                        message: "Battery not found",
-                        data: []
-                    });
-                }
-                return res.status(200).json({
-                    status: true,
-                    message: "Success",
-                    count: result.length,
-                    data: result
-                });
+                console.error(error);
+                return res.status(500).json({ status: false, message: "Database Error" });
             }
+            return res.status(200).json({
+                status: true,
+                message: "Success",
+                count: result.length,
+                data: result
+            });
         });
     } catch (e) {
-        console.log(e);
-        res.status(500).json({ status: false, message: "Technical Issue..." });
+        console.error(e);
+        res.status(500).json({ status: false, message: "Technical Issue" });
     }
 });
 
-// ==================== 2. INSERT API ====================
-router.post("/insert-battery", function (req, res, next) {
+// ==================== 2. INSERT BATTERY ====================
+router.post("/insert-battery", (req, res) => {
     try {
         const { batteryname } = req.body;
-
         if (!batteryname) {
-            return res.status(400).json({
-                status: false,
-                message: "Battery name is required"
-            });
+            return res.status(400).json({ status: false, message: "Battery name is required" });
         }
 
-        // Check if battery already exists
-        const checkQuery = "SELECT batteryid FROM batteries WHERE batteryname = ?";
-        pool.query(checkQuery, [batteryname], function (err, checkResult) {
+        // Check for duplicate
+        pool.query("SELECT batteryid FROM batteries WHERE batteryname = ?", [batteryname], (err, checkResult) => {
             if (err) {
-                console.log(err);
-                return res.status(500).json({
-                    status: false,
-                    message: "Database Error...",
-                    error: err.sqlMessage
-                });
+                console.error(err);
+                return res.status(500).json({ status: false, message: "Database Error" });
             }
-
             if (checkResult.length > 0) {
-                return res.status(400).json({
-                    status: false,
-                    message: "Battery name already exists"
-                });
+                return res.status(400).json({ status: false, message: "Battery name already exists" });
             }
 
-            const query = `INSERT INTO batteries (batteryname, createdat, updatedat) 
-                           VALUES (?, NOW(), NOW())`;
-            const values = [batteryname];
-
-            pool.query(query, values, function (error, result) {
-                if (error) {
-                    console.log(error);
-                    res.status(500).json({
-                        status: false,
-                        message: "Database Error...",
-                        error: error.sqlMessage
-                    });
-                } else {
-                    const selectQuery = `SELECT 
-                        batteryid,
-                        batteryname,
-                        DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                        DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                        FROM batteries WHERE batteryid = ?`;
-
-                    pool.query(selectQuery, [result.insertId], function (err, insertedData) {
-                        if (err) {
-                            return res.status(200).json({
-                                status: true,
-                                message: "Battery added successfully",
-                                data: { batteryid: result.insertId }
-                            });
-                        }
-                        return res.status(200).json({
-                            status: true,
-                            message: "Battery added successfully",
-                            data: insertedData[0]
-                        });
+            pool.query(
+                "INSERT INTO batteries (batteryname, createdat, updatedat) VALUES (?, NOW(), NOW())",
+                [batteryname],
+                (error, result) => {
+                    if (error) {
+                        console.error(error);
+                        return res.status(500).json({ status: false, message: "Database Error" });
+                    }
+                    return res.status(200).json({
+                        status: true,
+                        message: "Battery added successfully",
+                        data: { batteryid: result.insertId, batteryname }
                     });
                 }
-            });
+            );
         });
     } catch (e) {
-        console.log(e);
-        res.status(500).json({ status: false, message: "Technical Issue..." });
+        console.error(e);
+        res.status(500).json({ status: false, message: "Technical Issue" });
     }
 });
 
-// ==================== 3. UPDATE API ====================
-router.post("/update-battery", function (req, res, next) {
+// ==================== 3. UPDATE BATTERY ====================
+router.post("/update-battery", (req, res) => {
     try {
         const { batteryid, batteryname } = req.body;
-
-        if (!batteryid) {
-            return res.status(400).json({
-                status: false,
-                message: "Battery ID is required"
-            });
+        if (!batteryid || !batteryname) {
+            return res.status(400).json({ status: false, message: "Battery ID and name are required" });
         }
 
-        if (!batteryname) {
-            return res.status(400).json({
-                status: false,
-                message: "Battery name is required"
-            });
-        }
+        // Check for duplicate name excluding itself
+        pool.query(
+            "SELECT batteryid FROM batteries WHERE batteryname = ? AND batteryid != ?",
+            [batteryname, batteryid],
+            (err, checkResult) => {
+                if (err) {
+                    console.error(err);
+                    return res.status(500).json({ status: false, message: "Database Error" });
+                }
+                if (checkResult.length > 0) {
+                    return res.status(400).json({ status: false, message: "Battery name already exists" });
+                }
 
-        // Check if battery name already exists (excluding current)
-        const checkQuery = "SELECT batteryid FROM batteries WHERE batteryname = ? AND batteryid != ?";
-        pool.query(checkQuery, [batteryname, batteryid], function (err, checkResult) {
-            if (err) {
-                console.log(err);
-                return res.status(500).json({
-                    status: false,
-                    message: "Database Error...",
-                    error: err.sqlMessage
-                });
-            }
-
-            if (checkResult.length > 0) {
-                return res.status(400).json({
-                    status: false,
-                    message: "Battery name already exists"
-                });
-            }
-
-            const query = `UPDATE batteries SET batteryname = ?, updatedat = NOW() WHERE batteryid = ?`;
-            const values = [batteryname, batteryid];
-
-            pool.query(query, values, function (error, result) {
-                if (error) {
-                    console.log(error);
-                    res.status(500).json({
-                        status: false,
-                        message: "Database Error...",
-                        error: error.sqlMessage
-                    });
-                } else {
-                    if (result.affectedRows === 0) {
-                        return res.status(404).json({
-                            status: false,
-                            message: "Battery not found"
-                        });
-                    }
-
-                    const selectQuery = `SELECT 
-                        batteryid,
-                        batteryname,
-                        DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') as createdat,
-                        DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') as updatedat
-                        FROM batteries WHERE batteryid = ?`;
-
-                    pool.query(selectQuery, [batteryid], function (err, updatedData) {
-                        if (err) {
-                            return res.status(200).json({
-                                status: true,
-                                message: "Battery updated successfully",
-                                affectedRows: result.affectedRows
-                            });
+                pool.query(
+                    "UPDATE batteries SET batteryname = ?, updatedat = NOW() WHERE batteryid = ?",
+                    [batteryname, batteryid],
+                    (error, result) => {
+                        if (error) {
+                            console.error(error);
+                            return res.status(500).json({ status: false, message: "Database Error" });
+                        }
+                        if (result.affectedRows === 0) {
+                            return res.status(404).json({ status: false, message: "Battery not found" });
                         }
                         return res.status(200).json({
                             status: true,
                             message: "Battery updated successfully",
-                            affectedRows: result.affectedRows,
-                            data: updatedData[0]
+                            data: { batteryid, batteryname }
                         });
-                    });
-                }
-            });
-        });
+                    }
+                );
+            }
+        );
     } catch (e) {
-        console.log(e);
-        res.status(500).json({ status: false, message: "Technical Issue..." });
+        console.error(e);
+        res.status(500).json({ status: false, message: "Technical Issue" });
     }
 });
 
-// ==================== 4. DELETE API ====================
-router.post("/delete-battery", function (req, res, next) {
+// ==================== 4. DELETE BATTERY ====================
+router.post("/delete-battery", (req, res) => {
     try {
         const { batteryid } = req.body;
-
         if (!batteryid) {
-            return res.status(400).json({
-                status: false,
-                message: "Battery ID is required"
-            });
+            return res.status(400).json({ status: false, message: "Battery ID is required" });
         }
 
-        const selectQuery = `SELECT batteryid, batteryname FROM batteries WHERE batteryid = ?`;
-
-        pool.query(selectQuery, [batteryid], function (error, result) {
-            if (error) {
-                console.log(error);
-                return res.status(500).json({
-                    status: false,
-                    message: "Database Error...",
-                    error: error.sqlMessage
-                });
+        // First fetch the battery to return it in the response
+        pool.query("SELECT batteryid, batteryname FROM batteries WHERE batteryid = ?", [batteryid], (err, result) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ status: false, message: "Database Error" });
             }
-
             if (result.length === 0) {
-                return res.status(404).json({
-                    status: false,
-                    message: "Battery not found"
-                });
+                return res.status(404).json({ status: false, message: "Battery not found" });
             }
 
             const batteryData = result[0];
-
-            const deleteQuery = "DELETE FROM batteries WHERE batteryid = ?";
-
-            pool.query(deleteQuery, [batteryid], function (error, deleteResult) {
+            pool.query("DELETE FROM batteries WHERE batteryid = ?", [batteryid], (error) => {
                 if (error) {
-                    console.log(error);
-                    return res.status(500).json({
-                        status: false,
-                        message: "Database Error...",
-                        error: error.sqlMessage
-                    });
+                    console.error(error);
+                    return res.status(500).json({ status: false, message: "Database Error" });
                 }
-
                 return res.status(200).json({
                     status: true,
                     message: "Battery deleted successfully",
@@ -274,8 +158,8 @@ router.post("/delete-battery", function (req, res, next) {
             });
         });
     } catch (e) {
-        console.log(e);
-        res.status(500).json({ status: false, message: "Technical Issue..." });
+        console.error(e);
+        res.status(500).json({ status: false, message: "Technical Issue" });
     }
 });
 

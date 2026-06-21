@@ -1,6 +1,6 @@
-const { app, BrowserWindow, protocol } = require('electron');
+const { app, BrowserWindow } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { exec } = require('child_process');
 
 let mainWindow;
 let backendProcess;
@@ -8,34 +8,39 @@ let backendProcess;
 function startBackend() {
   const isDev = !app.isPackaged;
   
-  let backendPath;
+  let backendDir;
   if (isDev) {
-    backendPath = path.join(__dirname, 'snowball_backend', 'bin', 'www');
+    backendDir = path.join(__dirname, 'snowball_backend');
   } else {
-    backendPath = path.join(process.resourcesPath, 'snowball_backend', 'bin', 'www');
+    backendDir = path.join(process.resourcesPath, 'snowball_backend');
   }
 
-  console.log('Starting backend from:', backendPath);
+  console.log('Starting backend from:', backendDir);
 
-  backendProcess = spawn('node', [backendPath], {
+  // Use exec with full path on Windows
+  const command = `cd /d "${backendDir}" && node ./bin/www`;
+  
+  backendProcess = exec(command, {
     env: { 
       ...process.env, 
-      NODE_ENV: isDev ? 'development' : 'production',
       PORT: '5000'
-    },
-    shell: true
+    }
   });
 
   backendProcess.stdout.on('data', (data) => {
-    console.log(`Backend: ${data}`);
+    console.log(`Backend: ${data.toString()}`);
   });
 
   backendProcess.stderr.on('data', (data) => {
-    console.error(`Backend Error: ${data}`);
+    console.error(`Backend Error: ${data.toString()}`);
   });
 
   backendProcess.on('error', (err) => {
     console.error('Failed to start backend:', err);
+  });
+
+  backendProcess.on('close', (code) => {
+    console.log(`Backend exited with code ${code}`);
   });
 }
 
@@ -56,13 +61,8 @@ function createWindow() {
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
   } else {
-    // Serve static files using a custom protocol
     mainWindow.loadFile(path.join(__dirname, 'snowball_frontend', 'out', 'index.html'));
   }
-
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
 }
 
 app.whenReady().then(() => {
@@ -70,13 +70,7 @@ app.whenReady().then(() => {
   
   setTimeout(() => {
     createWindow();
-  }, 3000);
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
+  }, 5000);
 });
 
 app.on('window-all-closed', () => {

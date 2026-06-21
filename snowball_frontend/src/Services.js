@@ -1,55 +1,77 @@
 import axios from "axios";
 const serverURL = 'http://localhost:5000'
 
+// Cache for deduplicating requests
+const pendingRequests = new Map();
+
 const postData = async (url, body) => {
     try {
-        var response = await axios.post(`${serverURL}/${url}`, body)
-        var result = response.data
-        return (result)
-    }
-    catch (e) {
-        return (null)
+        // Create a unique key for this request
+        const requestKey = `${url}-${JSON.stringify(body)}`;
+
+        // If same request is already in progress, return that promise
+        if (pendingRequests.has(requestKey)) {
+            return pendingRequests.get(requestKey);
+        }
+
+        // Make the request
+        const requestPromise = (async () => {
+            try {
+                const response = await axios.post(`${serverURL}/${url}`, body);
+                const result = response.data;
+                return result;
+            } catch (e) {
+                return null;
+            } finally {
+                // Remove from cache after 2 seconds
+                setTimeout(() => {
+                    pendingRequests.delete(requestKey);
+                }, 2000);
+            }
+        })();
+
+        // Store the promise
+        pendingRequests.set(requestKey, requestPromise);
+
+        return requestPromise;
+    } catch (e) {
+        return null;
     }
 }
 
 const getData = async (url) => {
     try {
-        var response = await axios.get(`${serverURL}/${url}`)
-        var result = response.data
-        return (result)
+        // Create a unique key for this request
+        const requestKey = `GET-${url}`;
+
+        // If same request is already in progress, return that promise
+        if (pendingRequests.has(requestKey)) {
+            return pendingRequests.get(requestKey);
+        }
+
+        // Make the request
+        const requestPromise = (async () => {
+            try {
+                const response = await axios.get(`${serverURL}/${url}`);
+                const result = response.data;
+                return result;
+            } catch (e) {
+                return null;
+            } finally {
+                // Remove from cache after 2 seconds
+                setTimeout(() => {
+                    pendingRequests.delete(requestKey);
+                }, 2000);
+            }
+        })();
+
+        // Store the promise
+        pendingRequests.set(requestKey, requestPromise);
+
+        return requestPromise;
+    } catch (e) {
+        return null;
     }
-    catch (e) {
-        return (null)
-    }
 }
 
-const generateOtp = () => {
-    var otp = parseInt((Math.random() * 8999) + 1000)
-    return (otp)
-}
-
-function getDate() {
-    const cd = new Date();
-    return `${cd.getFullYear()}/${cd.getMonth() + 1}/${cd.getDate()}`;
-}
-
-function getTime() {
-    const cd = new Date();
-    return `${cd.getHours()}:${cd.getMinutes()}:${cd.getSeconds()}`;
-}
-
-const currentDate = () => {
-    var d = new Date();
-    var cd = d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
-    var ct = d.getHours() + ":" + d.getMinutes() + ":" + d.getSeconds();
-    return cd + " " + ct;
-};
-
-const createDate = (date) => {
-    var d = new Date(date);
-    var cd = d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
-    var ct = d.getHours() + ":" + d.getMinutes() + ":" + d.getSeconds();
-    return cd + " " + ct;
-};
-
-export { serverURL, postData, getData, generateOtp, getDate, getTime, currentDate, createDate}
+export { serverURL, postData, getData }
