@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('./pool');               // your DB connection
-const rateLimiter = require('./ratelimiter');  // import the rate limiter
+const rateLimiter = require('./rateLimiter');  // import the rate limiter
 
 // Apply global rate limit: 100 requests per 15 min per IP
 router.use(rateLimiter({

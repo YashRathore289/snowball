@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('./pool');
-const rateLimiter = require('./ratelimiter');
+const rateLimiter = require('./rateLimiter');
 
 // Global rate limit for all debt routes: 100 requests per 15 minutes per IP
 router.use(rateLimiter({
