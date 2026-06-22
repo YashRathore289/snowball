@@ -33,12 +33,12 @@ app.use('/shopgoods', require('./routes/shopgoods'));
 app.use('/shopowner', require('./routes/shopowner'));
 
 // catch 404 and forward to error handler
-app.use(function(req, res, next) {
+app.use(function (req, res, next) {
   next(createError(404));
 });
 
 // error handler
-app.use(function(err, req, res, next) {
+app.use(function (err, req, res, next) {
   // set locals, only providing error in development
   res.locals.message = err.message;
   res.locals.error = req.app.get('env') === 'development' ? err : {};
@@ -47,5 +47,17 @@ app.use(function(err, req, res, next) {
   res.status(err.status || 500);
   res.render('error');
 });
+
+const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'http://localhost:5000';
+
+setInterval(async () => {
+  try {
+    const res = await fetch(`${SELF_URL}/users`);
+    const data = await res.json();
+    console.log(`💓 Keep-alive ping OK — ${data.timestamp}`);
+  } catch (err) {
+    console.warn(`⚠️ Keep-alive ping failed: ${err.message}`);
+  }
+}, 14 * 60 * 1000);
 
 module.exports = app;

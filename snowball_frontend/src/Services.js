@@ -1,5 +1,5 @@
 import axios from "axios";
-const serverURL = process.env.serverURL || 'http://localhost:5000'
+const serverURL = 'http://localhost:5000'
 
 // Cache for deduplicating requests
 const pendingRequests = new Map();
