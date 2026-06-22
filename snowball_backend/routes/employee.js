@@ -44,7 +44,7 @@ router.post("/retrieve-salesman", (req, res) => {
 
     if (salesmanid) {
       query = `SELECT 
-        salesmanid, fullname, fathername, mothername,
+        salesmanid, fullname, photo, fathername, mothername,
         DATE_FORMAT(dob, '%Y-%m-%d') AS dob, age, married,
         permanentaddress, currentaddress, mobileno, emergencymobileno,
         whatsappno, idproof, incomedetail, bankname, accountno,
@@ -56,7 +56,7 @@ router.post("/retrieve-salesman", (req, res) => {
       values = [salesmanid];
     } else {
       query = `SELECT 
-        salesmanid, fullname, fathername, mothername,
+        salesmanid, fullname, photo, fathername, mothername,
         DATE_FORMAT(dob, '%Y-%m-%d') AS dob, age, married,
         permanentaddress, currentaddress, mobileno, emergencymobileno,
         whatsappno, idproof, incomedetail, bankname, accountno,
@@ -123,17 +123,19 @@ router.post("/retrieve-salesmen-without-attendance", (req, res) => {
 
 // ==================== INSERT SALESMAN ====================
 router.post("/insert-salesman", upload.fields([
+  { name: 'photo', maxCount: 1 },
   { name: 'idproof', maxCount: 1 },
   { name: 'salesmansignature', maxCount: 1 },
   { name: 'ownersignature', maxCount: 1 }
 ]), (req, res) => {
   try {
+    const photo = req.files['photo'] ? req.files['photo'][0].filename : null;
     const idproof = req.files['idproof'] ? req.files['idproof'][0].filename : null;
     const salesmansignature = req.files['salesmansignature'] ? req.files['salesmansignature'][0].filename : null;
     const ownersignature = req.files['ownersignature'] ? req.files['ownersignature'][0].filename : null;
 
     const query = `INSERT INTO salesman (
-      fullname, fathername, mothername, dob, age, married,
+      fullname, photo, fathername, mothername, dob, age, married,
       permanentaddress, currentaddress, mobileno, emergencymobileno,
       whatsappno, idproof, incomedetail, bankname, accountno,
       ifsccode, aadharno, panno, licenseno,
@@ -142,6 +144,7 @@ router.post("/insert-salesman", upload.fields([
 
     const values = [
       req.body.fullname || null,
+      photo,
       req.body.fathername || null,
       req.body.mothername || null,
       req.body.dob || null,
@@ -172,7 +175,7 @@ router.post("/insert-salesman", upload.fields([
 
       // Fetch the newly inserted record
       const selectQuery = `SELECT 
-        salesmanid, fullname, fathername, mothername,
+        salesmanid, fullname, photo, fathername, mothername,
         DATE_FORMAT(dob, '%Y-%m-%d') AS dob, age, married,
         permanentaddress, currentaddress, mobileno, emergencymobileno,
         whatsappno, idproof, incomedetail, bankname, accountno,
@@ -197,6 +200,7 @@ router.post("/insert-salesman", upload.fields([
 
 // ==================== UPDATE SALESMAN ====================
 router.post("/update-salesman", upload.fields([
+  { name: 'photo', maxCount: 1 },
   { name: 'idproof', maxCount: 1 },
   { name: 'salesmansignature', maxCount: 1 },
   { name: 'ownersignature', maxCount: 1 }
@@ -207,6 +211,7 @@ router.post("/update-salesman", upload.fields([
       return res.status(400).json({ status: false, message: "Salesman ID is required" });
     }
 
+    const photo = req.files['photo'] ? req.files['photo'][0].filename : null;
     const idproof = req.files['idproof'] ? req.files['idproof'][0].filename : null;
     const salesmansignature = req.files['salesmansignature'] ? req.files['salesmansignature'][0].filename : null;
     const ownersignature = req.files['ownersignature'] ? req.files['ownersignature'][0].filename : null;
@@ -228,6 +233,7 @@ router.post("/update-salesman", upload.fields([
       }
     });
 
+    if (photo) { updateFields.push('photo = ?'); values.push(photo); }
     if (idproof) { updateFields.push('idproof = ?'); values.push(idproof); }
     if (salesmansignature) { updateFields.push('salesmansignature = ?'); values.push(salesmansignature); }
     if (ownersignature) { updateFields.push('ownersignature = ?'); values.push(ownersignature); }
@@ -251,7 +257,7 @@ router.post("/update-salesman", upload.fields([
 
       // Fetch updated record
       const selectQuery = `SELECT 
-        salesmanid, fullname, fathername, mothername,
+        salesmanid, fullname, photo, fathername, mothername,
         DATE_FORMAT(dob, '%Y-%m-%d') AS dob, age, married,
         permanentaddress, currentaddress, mobileno, emergencymobileno,
         whatsappno, idproof, incomedetail, bankname, accountno,
@@ -282,7 +288,7 @@ router.post("/delete-salesman", (req, res) => {
       return res.status(400).json({ status: false, message: "Salesman ID is required" });
     }
 
-    const selectQuery = "SELECT salesmanid, fullname, mobileno, idproof, salesmansignature, ownersignature FROM salesman WHERE salesmanid = ?";
+    const selectQuery = "SELECT salesmanid, fullname, mobileno, photo, idproof, salesmansignature, ownersignature FROM salesman WHERE salesmanid = ?";
     pool.query(selectQuery, [salesmanid], (error, result) => {
       if (error) {
         console.error(error);
@@ -299,16 +305,6 @@ router.post("/delete-salesman", (req, res) => {
           console.error(error);
           return res.status(500).json({ status: false, message: "Database Error" });
         }
-
-        // Optional: delete image files from disk
-        // const fs = require('fs');
-        // const path = require('path');
-        // ['idproof', 'salesmansignature', 'ownersignature'].forEach(field => {
-        //   if (salesmanData[field]) {
-        //     const imagePath = path.join(__dirname, '../public/images', salesmanData[field]);
-        //     if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
-        //   }
-        // });
 
         return res.status(200).json({
           status: true,

@@ -70,11 +70,13 @@ export default function SalesmanDetails({ cacheKey }) {
 
     // Image states
     const [imageFiles, setImageFiles] = useState({
+        photo: null,              // ADD this
         idproof: null,
         salesmansignature: null,
         ownersignature: null
     });
     const [imagePreviews, setImagePreviews] = useState({
+        photo: null,              // ADD this
         idproof: null,
         salesmansignature: null,
         ownersignature: null
@@ -159,8 +161,8 @@ export default function SalesmanDetails({ cacheKey }) {
             panno: '',
             licenseno: ''
         });
-        setImageFiles({ idproof: null, salesmansignature: null, ownersignature: null });
-        setImagePreviews({ idproof: null, salesmansignature: null, ownersignature: null });
+        setImageFiles({ photo: null, idproof: null, salesmansignature: null, ownersignature: null });
+        setImagePreviews({ photo: null, idproof: null, salesmansignature: null, ownersignature: null });
         setIsAddMode(true);
         setIsEditMode(false);
         setSelectedSalesman(null);
@@ -173,6 +175,7 @@ export default function SalesmanDetails({ cacheKey }) {
         setFormData(salesman);
         setImageFiles({ idproof: null, salesmansignature: null, ownersignature: null });
         setImagePreviews({
+            photo: salesman.photo ? `${serverURL}/images/${salesman.photo}` : null,
             idproof: salesman.idproof ? `${serverURL}/images/${salesman.idproof}` : null,
             salesmansignature: salesman.salesmansignature ? `${serverURL}/images/${salesman.salesmansignature}` : null,
             ownersignature: salesman.ownersignature ? `${serverURL}/images/${salesman.ownersignature}` : null
@@ -222,6 +225,7 @@ export default function SalesmanDetails({ cacheKey }) {
                     formDataWithImages.append(key, formData[key]);
                 }
             });
+            if (imageFiles.photo) formDataWithImages.append('photo', imageFiles.photo);
             if (imageFiles.idproof) formDataWithImages.append('idproof', imageFiles.idproof);
             if (imageFiles.salesmansignature) formDataWithImages.append('salesmansignature', imageFiles.salesmansignature);
             if (imageFiles.ownersignature) formDataWithImages.append('ownersignature', imageFiles.ownersignature);
@@ -248,6 +252,7 @@ export default function SalesmanDetails({ cacheKey }) {
                         setSelectedSalesman(updatedData);
                         setFormData(updatedData);
                         setImagePreviews({
+                            photo: updatedData.photo ? `${serverURL}/images/${updatedData.photo}` : null,
                             idproof: updatedData.idproof ? `${serverURL}/images/${updatedData.idproof}` : null,
                             salesmansignature: updatedData.salesmansignature ? `${serverURL}/images/${updatedData.salesmansignature}` : null,
                             ownersignature: updatedData.ownersignature ? `${serverURL}/images/${updatedData.ownersignature}` : null
@@ -289,6 +294,7 @@ export default function SalesmanDetails({ cacheKey }) {
         setIsEditMode(false);
         setFormData(selectedSalesman);
         setImagePreviews({
+            photo: selectedSalesman.photo ? `${serverURL}/images/${selectedSalesman.photo}` : null,
             idproof: selectedSalesman.idproof ? `${serverURL}/images/${selectedSalesman.idproof}` : null,
             salesmansignature: selectedSalesman.salesmansignature ? `${serverURL}/images/${selectedSalesman.salesmansignature}` : null,
             ownersignature: selectedSalesman.ownersignature ? `${serverURL}/images/${selectedSalesman.ownersignature}` : null
@@ -388,7 +394,39 @@ export default function SalesmanDetails({ cacheKey }) {
                                 <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2 mb-3">
                                     Picture Upload
                                 </h4>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    {/* Photo Upload */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Photo</label>
+                                        {imagePreviews.photo ? (
+                                            <div className="relative">
+                                                <img src={imagePreviews.photo} alt="Photo" className="w-full h-32 object-cover rounded-lg border border-gray-200" />
+                                                <button
+                                                    onClick={() => handleRemoveImage('photo')}
+                                                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 cursor-pointer"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
+                                                <input
+                                                    type="file" accept="image/*"
+                                                    onChange={(e) => handleImageChange(e, 'photo')}
+                                                    className="hidden" id="photo-upload"
+                                                />
+                                                <label htmlFor="photo-upload" className="cursor-pointer">
+                                                    <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+                                                    <p className="text-sm text-gray-500 mt-1">Click to upload</p>
+                                                </label>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     {/* ID Proof */}
                                     <div className="space-y-2">
                                         <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">ID Proof</label>
@@ -494,7 +532,17 @@ export default function SalesmanDetails({ cacheKey }) {
                                 <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2 mb-3">
                                     Uploaded Images
                                 </h4>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    {selectedSalesman.photo && (
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Photo</label>
+                                            <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
+                                                <a href={`${serverURL}/images/${selectedSalesman.photo}`} target="_blank" className="text-blue-600 hover:underline cursor-pointer">
+                                                    View Photo
+                                                </a>
+                                            </div>
+                                        </div>
+                                    )}
                                     {selectedSalesman.idproof && (
                                         <div className="space-y-1">
                                             <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">ID Proof</label>
@@ -601,19 +649,29 @@ export default function SalesmanDetails({ cacheKey }) {
                     >
                         <div className="flex flex-col items-center">
                             <div className="w-30 h-30 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-3xl font-bold mb-3 overflow-hidden">
-                                {salesman.idproof ? (
-                                    <img
-                                        src={`${serverURL}/images/${salesman.idproof}`}
-                                        alt={salesman.fullname}
-                                        className="w-full h-full object-cover"
-                                        onError={(e) => {
-                                            e.target.style.display = 'none';
-                                            e.target.parentElement.innerHTML = salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?';
-                                        }}
-                                    />
-                                ) : (
-                                    salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'
-                                )}
+                                {
+                                    salesman.photo ? (
+                                        <img
+                                            src={`${serverURL}/images/${salesman.photo}`}
+                                            alt={salesman.fullname}
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                                e.target.style.display = 'none';
+                                                e.target.parentElement.innerHTML = salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?';
+                                            }}
+                                        />) : salesman.idproof ? (
+                                            <img
+                                                src={`${serverURL}/images/${salesman.idproof}`}
+                                                alt={salesman.fullname}
+                                                className="w-full h-full object-cover"
+                                                onError={(e) => {
+                                                    e.target.style.display = 'none';
+                                                    e.target.parentElement.innerHTML = salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?';
+                                                }}
+                                            />
+                                        ) : (
+                                        salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'
+                                    )}
                             </div>
                             <div className="mt-2 flex items-center gap-2">
                                 <span className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-full">
