@@ -49,7 +49,7 @@ export default function Dashboard() {
     useEffect(() => {
         const storedUser = sessionStorage.getItem("user");
         if (!storedUser) {
-            // window.location.href = '/login'
+            window.location.href = '/login'
         }
         setUser(JSON.parse(storedUser));
     }, []);
