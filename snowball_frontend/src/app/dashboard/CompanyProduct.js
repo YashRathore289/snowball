@@ -1,10 +1,10 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { postData } from '@/Services';
-import { saveCache, getCache } from './ComponentCache';
+import { saveCache, getCache, clearCache } from './ComponentCache';
+import { Calendar, Pencil, Trash2, Filter, X } from 'lucide-react';
 
 export default function CompanyProductManagement({ cacheKey }) {
-  // Restore from cache if available
   const cachedData = cacheKey ? getCache(cacheKey) : null;
 
   const [products, setProducts] = useState(cachedData?.products || []);
@@ -15,38 +15,57 @@ export default function CompanyProductManagement({ cacheKey }) {
   const [isAddMode, setIsAddMode] = useState(false);
   const [formData, setFormData] = useState({
     companyproductid: '',
-    icecreamname: '',
-    type: '',
-    orderedqty: '',
-    orderedamount: '',
-    deliveredqty: '',
-    deliveredamount: '',
     entry_date: new Date().toISOString().split('T')[0]
   });
   const [selectedProduct, setSelectedProduct] = useState(null);
 
-  // Multi-entry states
+  // Filter states
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [selectedYear, setSelectedYear] = useState('');
+  const [isFiltered, setIsFiltered] = useState(false);
+
+  // Generate 5-year range automatically
+  const currentYear = new Date().getFullYear();
+  const yearRange = useMemo(() => {
+    const years = [];
+    for (let i = currentYear + 2; i >= currentYear - 2; i--) {
+      years.push(i);
+    }
+    return years;
+  }, []);
+
+  const months = useMemo(() => [
+    { value: '01', label: 'January' },
+    { value: '02', label: 'February' },
+    { value: '03', label: 'March' },
+    { value: '04', label: 'April' },
+    { value: '05', label: 'May' },
+    { value: '06', label: 'June' },
+    { value: '07', label: 'July' },
+    { value: '08', label: 'August' },
+    { value: '09', label: 'September' },
+    { value: '10', label: 'October' },
+    { value: '11', label: 'November' },
+    { value: '12', label: 'December' },
+  ], []);
+
   const [entries, setEntries] = useState([
     {
-      icecreamname: '',
-      type: '',
-      orderedqty: '',
-      orderedamount: '',
-      deliveredqty: '',
-      deliveredamount: ''
+      IceCream: '',
+      Type: '',
+      OrderedQty: '',
+      OrderedAmount: '',
+      DeliveredQty: '',
+      DeliveredAmount: ''
     }
   ]);
 
-  // Toast notification state
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
-
-  // Confirmation popup state
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [confirmMessage, setConfirmMessage] = useState('');
   const [confirmAction, setConfirmAction] = useState(null);
 
-  // Auto-dismiss toast after 5 seconds
   useEffect(() => {
     if (!toastVisible) return;
     const timer = setTimeout(() => setToastVisible(false), 5000);
@@ -64,11 +83,15 @@ export default function CompanyProductManagement({ cacheKey }) {
     setConfirmVisible(true);
   }, []);
 
-  // Fetch all company products
-  const fetchProducts = useCallback(async () => {
+  const fetchProducts = useCallback(async (month = '', year = '') => {
     setLoading(true);
     try {
-      const result = await postData('companyproduct/retrieve-company-products', {});
+      let result;
+      if (month || year) {
+        result = await postData('companyproduct/retrieve-company-products-by-month', { month, year });
+      } else {
+        result = await postData('companyproduct/retrieve-company-products', {});
+      }
       if (result?.status) {
         setProducts(result.data);
       }
@@ -79,7 +102,6 @@ export default function CompanyProductManagement({ cacheKey }) {
     }
   }, []);
 
-  // Fetch ice creams from products table
   const fetchIceCreams = useCallback(async () => {
     try {
       const result = await postData('product/retrieve-products', {});
@@ -98,19 +120,29 @@ export default function CompanyProductManagement({ cacheKey }) {
     }
   }, [fetchProducts, fetchIceCreams, cachedData]);
 
-  // Save state to cache before unmounting
   useEffect(() => {
     return () => {
       if (cacheKey) {
-        saveCache(cacheKey, {
-          products,
-          iceCreams,
-        });
+        saveCache(cacheKey, { products, iceCreams });
       }
     };
   }, [cacheKey, products, iceCreams]);
 
-  // Memoized summary from products
+  // Handle filter apply
+  const handleApplyFilter = useCallback(() => {
+    setIsFiltered(!!(selectedMonth || selectedYear));
+    fetchProducts(selectedMonth, selectedYear);
+  }, [selectedMonth, selectedYear, fetchProducts]);
+
+  // Handle filter clear
+  const handleClearFilter = useCallback(() => {
+    setSelectedMonth('');
+    setSelectedYear('');
+    setIsFiltered(false);
+    fetchProducts('', '');
+  }, [fetchProducts]);
+
+  // Summary calculated from details JSON
   const summary = useMemo(() => {
     let totalOrdered = 0;
     let totalDelivered = 0;
@@ -118,10 +150,15 @@ export default function CompanyProductManagement({ cacheKey }) {
     let totalDeliveredAmount = 0;
 
     products.forEach(product => {
-      totalOrdered += parseInt(product.orderedqty) || 0;
-      totalDelivered += parseInt(product.deliveredqty) || 0;
-      totalOrderedAmount += parseFloat(product.orderedamount) || 0;
-      totalDeliveredAmount += parseFloat(product.deliveredamount) || 0;
+      const details = product.details;
+      if (!details) return;
+      const items = Array.isArray(details) ? details : (details.items || []);
+      items.forEach(item => {
+        totalOrdered += parseFloat(item.OrderedQty || item.qty) || 0;
+        totalDelivered += parseFloat(item.DeliveredQty || 0) || 0;
+        totalOrderedAmount += parseFloat(item.OrderedAmount || item.total) || 0;
+        totalDeliveredAmount += parseFloat(item.DeliveredAmount || 0) || 0;
+      });
     });
 
     return {
@@ -134,65 +171,60 @@ export default function CompanyProductManagement({ cacheKey }) {
     };
   }, [products]);
 
-  // Handle Add button click
   const handleAddClick = useCallback(() => {
     setFormData({
       companyproductid: '',
-      icecreamname: '',
-      type: '',
-      orderedqty: '',
-      orderedamount: '',
-      deliveredqty: '',
-      deliveredamount: '',
       entry_date: new Date().toISOString().split('T')[0]
     });
-    setEntries([
-      {
-        icecreamname: '',
-        type: '',
-        orderedqty: '',
-        orderedamount: '',
-        deliveredqty: '',
-        deliveredamount: ''
-      }
-    ]);
+    setEntries([{
+      IceCream: '',
+      Type: '',
+      OrderedQty: '',
+      OrderedAmount: '',
+      DeliveredQty: '',
+      DeliveredAmount: ''
+    }]);
     setIsAddMode(true);
     setIsEditMode(false);
     setSelectedProduct(null);
     setIsModalOpen(true);
   }, []);
 
-  // Handle Edit button click
   const handleEditClick = useCallback((product) => {
     setSelectedProduct(product);
     setFormData({
       companyproductid: product.companyproductid,
-      icecreamname: product.icecreamname,
-      type: product.type,
-      orderedqty: product.orderedqty,
-      orderedamount: product.orderedamount,
-      deliveredqty: product.deliveredqty,
-      deliveredamount: product.deliveredamount,
-      entry_date: product.entry_date || new Date().toISOString().split('T')[0]
+      entry_date: product.entry_date ? product.entry_date.split('T')[0] : new Date().toISOString().split('T')[0]
     });
+    const details = product.details;
+    let items = [];
+    if (Array.isArray(details)) items = details;
+    else if (details?.items) items = details.items;
+    setEntries(items.map(item => ({
+      IceCream: item.IceCream || item.productname || '',
+      Type: item.Type || '',
+      OrderedQty: item.OrderedQty || item.qty || '',
+      OrderedAmount: item.OrderedAmount || item.total || '',
+      DeliveredQty: item.DeliveredQty || '',
+      DeliveredAmount: item.DeliveredAmount || ''
+    })));
     setIsEditMode(true);
     setIsAddMode(false);
     setIsModalOpen(true);
   }, []);
 
-  // Handle form input change
   const handleInputChange = useCallback((e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   }, []);
 
-  // Delete function (actual logic after confirmation)
   const performDelete = useCallback(async (companyproductid) => {
     try {
       const result = await postData('companyproduct/delete-company-product', { companyproductid });
       if (result?.status) {
+        clearCache(cacheKey);
         showToast('Product deleted successfully!');
-        fetchProducts();
+        fetchProducts(isFiltered ? selectedMonth : '', isFiltered ? selectedYear : '');
       } else {
         showToast(result?.message || 'Failed to delete');
       }
@@ -200,25 +232,20 @@ export default function CompanyProductManagement({ cacheKey }) {
       console.error('Error deleting product:', error);
       showToast('Error deleting product');
     }
-  }, [fetchProducts, showToast]);
+  }, [fetchProducts, showToast, isFiltered, selectedMonth, selectedYear]);
 
-  // Handle Delete click – opens confirmation popup
   const handleDelete = useCallback((companyproductid) => {
-    showConfirm(
-      'Are you sure you want to delete this product?',
-      () => performDelete(companyproductid)
-    );
+    showConfirm('Are you sure you want to delete this product?', () => performDelete(companyproductid));
   }, [showConfirm, performDelete]);
 
-  // Multi-entry handlers
   const addEntryRow = useCallback(() => {
     setEntries(prev => [...prev, {
-      icecreamname: '',
-      type: '',
-      orderedqty: '',
-      orderedamount: '',
-      deliveredqty: '',
-      deliveredamount: ''
+      IceCream: '',
+      Type: '',
+      OrderedQty: '',
+      OrderedAmount: '',
+      DeliveredQty: '',
+      DeliveredAmount: ''
     }]);
   }, []);
 
@@ -231,164 +258,155 @@ export default function CompanyProductManagement({ cacheKey }) {
       const newEntries = [...prev];
       newEntries[index] = { ...newEntries[index], [field]: value };
 
-      // Auto-calculate amount if product price is available
-      if (field === 'orderedqty' || field === 'icecreamname') {
-        const iceCream = iceCreams.find(ic => ic.productname === newEntries[index].icecreamname);
+      if (field === 'OrderedQty' || field === 'IceCream') {
+        const iceCream = iceCreams.find(ic => ic.productname === newEntries[index].IceCream);
         if (iceCream) {
           const price = parseFloat(iceCream.productprice) || 0;
-          const qty = parseFloat(newEntries[index].orderedqty) || 0;
-          newEntries[index] = { ...newEntries[index], orderedamount: (price * qty).toFixed(2) };
+          const qty = parseFloat(newEntries[index].OrderedQty) || 0;
+          newEntries[index] = { ...newEntries[index], OrderedAmount: (price * qty).toFixed(2) };
         }
       }
-
-      if (field === 'deliveredqty' || field === 'icecreamname') {
-        const iceCream = iceCreams.find(ic => ic.productname === newEntries[index].icecreamname);
+      if (field === 'DeliveredQty' || field === 'IceCream') {
+        const iceCream = iceCreams.find(ic => ic.productname === newEntries[index].IceCream);
         if (iceCream) {
           const price = parseFloat(iceCream.productprice) || 0;
-          const qty = parseFloat(newEntries[index].deliveredqty) || 0;
-          newEntries[index] = { ...newEntries[index], deliveredamount: (price * qty).toFixed(2) };
+          const qty = parseFloat(newEntries[index].DeliveredQty) || 0;
+          newEntries[index] = { ...newEntries[index], DeliveredAmount: (price * qty).toFixed(2) };
         }
       }
-
       return newEntries;
     });
   }, [iceCreams]);
 
-  // Handle Save - Single or Multiple
   const handleSave = useCallback(async () => {
     try {
-      const hasMultipleEntries = entries.length > 1 || (entries.length === 1 && entries[0].icecreamname);
+      const validEntries = entries.filter(entry => entry.IceCream);
+      if (validEntries.length === 0) {
+        showToast('Please fill at least one product');
+        return;
+      }
 
-      if (hasMultipleEntries && isAddMode) {
-        // Save multiple entries
-        let successCount = 0;
-        let failedCount = 0;
+      const details = validEntries.map(entry => ({
+        IceCream: entry.IceCream,
+        Type: entry.Type || '',
+        OrderedQty: parseFloat(entry.OrderedQty) || 0,
+        OrderedAmount: parseFloat(entry.OrderedAmount) || 0,
+        DeliveredQty: parseFloat(entry.DeliveredQty) || 0,
+        DeliveredAmount: parseFloat(entry.DeliveredAmount) || 0
+      }));
 
-        for (const entry of entries) {
-          if (entry.icecreamname && entry.type) {
-            const result = await postData('companyproduct/insert-company-product', {
-              icecreamname: entry.icecreamname,
-              type: entry.type,
-              orderedqty: entry.orderedqty || 0,
-              orderedamount: entry.orderedamount || 0,
-              deliveredqty: entry.deliveredqty || 0,
-              deliveredamount: entry.deliveredamount || 0,
-              entry_date: formData.entry_date
-            });
-            if (result?.status) {
-              successCount++;
-            } else {
-              failedCount++;
-            }
-          }
-        }
-
-        if (successCount > 0 && failedCount === 0) {
-          showToast(`${successCount} products added successfully!`);
-        } else if (successCount > 0) {
-          showToast(`${successCount} added, ${failedCount} failed.`);
+      if (isAddMode) {
+        const result = await postData('companyproduct/insert-company-product', {
+          entry_date: formData.entry_date,
+          details: details
+        });
+        if (result?.status) {
+          showToast('Product added successfully!');
+          setIsModalOpen(false);
+          clearCache(cacheKey);
+          fetchProducts(isFiltered ? selectedMonth : '', isFiltered ? selectedYear : '');
         } else {
-          showToast('Failed to add products. Please check your entries.');
+          showToast(result?.message || 'Failed to add product');
         }
-        setIsModalOpen(false);
-        fetchProducts();
       } else {
-        // Single entry (add or edit)
-        let result;
-        if (isAddMode) {
-          result = await postData('companyproduct/insert-company-product', {
-            icecreamname: formData.icecreamname,
-            type: formData.type,
-            orderedqty: formData.orderedqty || 0,
-            orderedamount: formData.orderedamount || 0,
-            deliveredqty: formData.deliveredqty || 0,
-            deliveredamount: formData.deliveredamount || 0,
-            entry_date: formData.entry_date
-          });
-          if (result?.status) {
-            showToast('Product added successfully!');
-            setIsModalOpen(false);
-            fetchProducts();
-          } else {
-            showToast(result?.message || 'Failed to add product');
-          }
+        const result = await postData('companyproduct/update-company-product', {
+          companyproductid: formData.companyproductid,
+          entry_date: formData.entry_date,
+          details: details
+        });
+        if (result?.status) {
+          showToast('Product updated successfully!');
+          setIsModalOpen(false);
+          clearCache(cacheKey);
+          fetchProducts(isFiltered ? selectedMonth : '', isFiltered ? selectedYear : '');
         } else {
-          result = await postData('companyproduct/update-company-product', {
-            companyproductid: formData.companyproductid,
-            icecreamname: formData.icecreamname,
-            type: formData.type,
-            orderedqty: formData.orderedqty,
-            orderedamount: formData.orderedamount,
-            deliveredqty: formData.deliveredqty,
-            deliveredamount: formData.deliveredamount,
-            entry_date: formData.entry_date
-          });
-          if (result?.status) {
-            showToast('Product updated successfully!');
-            setIsModalOpen(false);
-            fetchProducts();
-          } else {
-            showToast(result?.message || 'Failed to update product');
-          }
+          showToast(result?.message || 'Failed to update product');
         }
       }
     } catch (error) {
       console.error('Error saving product:', error);
       showToast('Error saving product');
     }
-  }, [entries, isAddMode, formData, iceCreams, fetchProducts, showToast]);
+  }, [entries, isAddMode, formData, fetchProducts, showToast, cacheKey, isFiltered, selectedMonth, selectedYear]);
 
-  // Stock status helper
-  const getStockStatus = useCallback((remaining) => {
-    if (remaining <= 0) return { label: 'Out of Stock', className: 'bg-red-100 text-red-700' };
-    if (remaining <= 10) return { label: 'Low Stock', className: 'bg-orange-100 text-orange-700' };
-    if (remaining <= 50) return { label: 'Medium Stock', className: 'bg-yellow-100 text-yellow-700' };
-    return { label: 'In Stock', className: 'bg-green-100 text-green-700' };
+  const renderDetails = useCallback((details) => {
+    if (!details) return <span className="text-gray-400 italic text-xs">No items</span>;
+    let items = Array.isArray(details) ? details : (details.items || []);
+    if (items.length === 0) return <span className="text-gray-400 italic text-xs">No items</span>;
+
+    return (
+      <div className="space-y-2 py-1 min-w-[340px]">
+        {items.map((item, idx) => {
+          const ordered = parseFloat(item.OrderedQty || item.qty) || 0;
+          const delivered = parseFloat(item.DeliveredQty) || 0;
+          const orderedAmt = parseFloat(item.OrderedAmount || item.total) || 0;
+          const deliveredAmt = parseFloat(item.DeliveredAmount) || 0;
+          const remaining = ordered - delivered;
+          const isComplete = remaining <= 0;
+
+          return (
+            <div
+              key={idx}
+              className="bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-lg px-3 py-2 transition-colors"
+            >
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-semibold text-gray-800 text-sm truncate">
+                    {item.IceCream || item.productname}
+                  </span>
+                  {item.Type && (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 whitespace-nowrap">
+                      {item.Type}
+                    </span>
+                  )}
+                </div>
+                <span
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${isComplete
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-amber-100 text-amber-700'
+                    }`}
+                >
+                  {isComplete ? 'Done' : `${remaining} left`}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-4 text-xs text-gray-500">
+                <span className="font-mono">
+                  Ord: <span className="text-gray-700 font-medium">{ordered}</span>
+                  <span className="text-gray-400"> (₹{orderedAmt.toFixed(2)})</span>
+                </span>
+                <span className="font-mono">
+                  Del: <span className="text-gray-700 font-medium">{delivered}</span>
+                  <span className="text-gray-400"> (₹{deliveredAmt.toFixed(2)})</span>
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   }, []);
 
-  // Render Modal
   const renderModal = () => {
     if (!isModalOpen) return null;
-
-    const hasMultipleEntries = entries.length > 1 || (entries.length === 1 && entries[0].icecreamname);
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-[95%] max-h-[90vh] overflow-hidden">
-          {/* Modal Header */}
-          <div className={`px-6 py-4 flex justify-between items-center ${
-            isAddMode && hasMultipleEntries
-              ? 'bg-gradient-to-r from-purple-600 to-purple-700'
-              : isAddMode
-                ? 'bg-gradient-to-r from-emerald-600 to-emerald-700'
-                : 'bg-gradient-to-r from-blue-600 to-blue-700'
-          }`}>
+          <div className={`px-6 py-4 flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-700`}>
             <div>
               <h2 className="text-xl font-semibold text-white">
-                {isAddMode && hasMultipleEntries
-                  ? 'Add Multiple Products'
-                  : isAddMode
-                    ? 'Add New Company Product'
-                    : 'Edit Company Product'
-                }
+                {isEditMode ? 'Edit Company Product' : 'Add New Company Product'}
               </h2>
-              {isAddMode && hasMultipleEntries && (
-                <p className="text-sm text-white/80">Add multiple products in one entry</p>
-              )}
             </div>
-            <button
-              onClick={() => setIsModalOpen(false)}
-              className="text-white hover:text-gray-200 transition-colors cursor-pointer"
-            >
+            <button onClick={() => setIsModalOpen(false)} className="text-white hover:text-gray-200 transition-colors cursor-pointer">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
-          {/* Modal Body */}
           <div className="overflow-y-auto p-6 max-h-[calc(90vh-120px)]">
-            {/* Date Field */}
             <div className="mb-4">
               <div className="space-y-1">
                 <label className="text-sm font-medium text-gray-700">Entry Date</label>
@@ -402,239 +420,70 @@ export default function CompanyProductManagement({ cacheKey }) {
               </div>
             </div>
 
-            {isAddMode ? (
-              // Multiple Entries Form
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-3 bg-gray-50 p-3 rounded-lg font-medium text-gray-600 text-sm">
-                  <div>Ice Cream</div>
-                  <div>Type</div>
-                  <div>Ordered Qty</div>
-                  <div>Ordered Amount</div>
-                  <div>Delivered Qty</div>
-                  <div>Delivered Amount</div>
-                </div>
-
-                {entries.map((entry, index) => (
-                  <div key={index} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center border-b border-gray-100 pb-3">
-                    <div>
-                      <select
-                        value={entry.icecreamname}
-                        onChange={(e) => handleEntryChange(index, 'icecreamname', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Select Ice Cream</option>
-                        {iceCreams.map((ice) => (
-                          <option key={ice.productid} value={ice.productname}>
-                            {ice.productname} (₹{parseFloat(ice.productprice).toFixed(2)})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <input
-                        type="text"
-                        value={entry.type}
-                        onChange={(e) => handleEntryChange(index, 'type', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Type (e.g., m-2)"
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="number"
-                        value={entry.orderedqty}
-                        onChange={(e) => handleEntryChange(index, 'orderedqty', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Qty"
-                        min="0"
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="number"
-                        value={entry.orderedamount}
-                        onChange={(e) => handleEntryChange(index, 'orderedamount', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-                        placeholder="Auto-calc"
-                        readOnly
-                        step="0.01"
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="number"
-                        value={entry.deliveredqty}
-                        onChange={(e) => handleEntryChange(index, 'deliveredqty', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Qty"
-                        min="0"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        value={entry.deliveredamount}
-                        onChange={(e) => handleEntryChange(index, 'deliveredamount', e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-                        placeholder="Auto-calc"
-                        readOnly
-                        step="0.01"
-                      />
-                      <button
-                        onClick={() => removeEntryRow(index)}
-                        className="px-2 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm cursor-pointer"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-                <button
-                  onClick={addEntryRow}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm cursor-pointer"
-                >
-                  + Add More Product
-                </button>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-3 bg-gray-50 p-3 rounded-lg font-medium text-gray-600 text-sm">
+                <div>Ice Cream</div>
+                <div>Type</div>
+                <div>Ordered Qty</div>
+                <div>Ordered Amount</div>
+                <div>Delivered Qty</div>
+                <div>Delivered Amount</div>
               </div>
-            ) : (
-              // Edit Mode - Single Entry Form
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">Ice Cream Name</label>
+
+              {entries.map((entry, index) => (
+                <div key={index} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center border-b border-gray-100 pb-3">
+                  <div>
                     <select
-                      name="icecreamname"
-                      value={formData.icecreamname}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      value={entry.IceCream}
+                      onChange={(e) => handleEntryChange(index, 'IceCream', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Select Ice Cream</option>
-                      {iceCreams.map((icecream) => (
-                        <option key={icecream.productid} value={icecream.productname}>
-                          {icecream.productname} (₹{parseFloat(icecream.productprice).toFixed(2)})
+                      {iceCreams.map((ice) => (
+                        <option key={ice.productid} value={ice.productname}>
+                          {ice.productname} (₹{parseFloat(ice.productprice).toFixed(2)})
                         </option>
                       ))}
                     </select>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">Type</label>
-                    <input
-                      type="text"
-                      name="type"
-                      value={formData.type}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      placeholder="Enter type (e.g., m-2, cup, cone)"
-                    />
+                  <div>
+                    <input type="text" value={entry.Type} onChange={(e) => handleEntryChange(index, 'Type', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Type" />
+                  </div>
+                  <div>
+                    <input type="number" value={entry.OrderedQty} onChange={(e) => handleEntryChange(index, 'OrderedQty', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Qty" min="0" />
+                  </div>
+                  <div>
+                    <input type="number" value={entry.OrderedAmount} readOnly
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50" step="0.01" />
+                  </div>
+                  <div>
+                    <input type="number" value={entry.DeliveredQty} onChange={(e) => handleEntryChange(index, 'DeliveredQty', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Qty" min="0" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input type="number" value={entry.DeliveredAmount} readOnly
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50" step="0.01" />
+                    <button onClick={() => removeEntryRow(index)} className="px-2 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm cursor-pointer">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
+              ))}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">Ordered Quantity</label>
-                    <input
-                      type="number"
-                      name="orderedqty"
-                      value={formData.orderedqty}
-                      onChange={(e) => {
-                        const qty = e.target.value;
-                        setFormData(prev => ({ ...prev, orderedqty: qty }));
-                        const iceCream = iceCreams.find(ic => ic.productname === formData.icecreamname);
-                        if (iceCream) {
-                          const price = parseFloat(iceCream.productprice) || 0;
-                          setFormData(prev => ({
-                            ...prev,
-                            orderedamount: (price * (parseFloat(qty) || 0)).toFixed(2)
-                          }));
-                        }
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      placeholder="Enter ordered quantity"
-                      min="0"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">Ordered Amount (₹)</label>
-                    <input
-                      type="number"
-                      name="orderedamount"
-                      value={formData.orderedamount}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50"
-                      placeholder="Auto-calculated"
-                      readOnly
-                      step="0.01"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">Delivered Quantity</label>
-                    <input
-                      type="number"
-                      name="deliveredqty"
-                      value={formData.deliveredqty}
-                      onChange={(e) => {
-                        const qty = e.target.value;
-                        setFormData(prev => ({ ...prev, deliveredqty: qty }));
-                        const iceCream = iceCreams.find(ic => ic.productname === formData.icecreamname);
-                        if (iceCream) {
-                          const price = parseFloat(iceCream.productprice) || 0;
-                          setFormData(prev => ({
-                            ...prev,
-                            deliveredamount: (price * (parseFloat(qty) || 0)).toFixed(2)
-                          }));
-                        }
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      placeholder="Enter delivered quantity"
-                      min="0"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">Delivered Amount (₹)</label>
-                    <input
-                      type="number"
-                      name="deliveredamount"
-                      value={formData.deliveredamount}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50"
-                      placeholder="Auto-calculated"
-                      readOnly
-                      step="0.01"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+              <button onClick={addEntryRow} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm cursor-pointer">
+                + Add More Product
+              </button>
+            </div>
           </div>
 
-          {/* Modal Footer */}
           <div className="border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
-            <button
-              onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              className={`px-4 py-2 text-white rounded-lg transition-colors cursor-pointer ${
-                isAddMode && (entries.length > 1 || (entries.length === 1 && entries[0].icecreamname))
-                  ? 'bg-purple-600 hover:bg-purple-700'
-                  : isAddMode
-                    ? 'bg-blue-600 hover:bg-blue-700'
-                    : 'bg-blue-600 hover:bg-blue-700'
-              }`}
-            >
-              {isAddMode && (entries.length > 1 || (entries.length === 1 && entries[0].icecreamname))
-                ? 'Add All Products'
-                : isAddMode
-                  ? 'Add Product'
-                  : 'Update Product'
-              }
+            <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer">Cancel</button>
+            <button onClick={handleSave} className={`px-4 py-2 text-white rounded-lg transition-colors cursor-pointer bg-blue-600 hover:bg-blue-700`}>
+              {isEditMode ? 'Update Product' : 'Submit Product'}
             </button>
           </div>
         </div>
@@ -642,7 +491,69 @@ export default function CompanyProductManagement({ cacheKey }) {
     );
   };
 
-  // Render Product Table
+  // Render Filter Section
+  const renderFilter = () => (
+    <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <Filter className="w-5 h-5 text-gray-500" />
+        <span className="text-sm font-medium text-gray-700">Filter by:</span>
+        
+        {/* Month Select */}
+        <select
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="">All Months</option>
+          {months.map((m) => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
+
+        {/* Year Select */}
+        <select
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="">All Years</option>
+          {yearRange.map((year) => (
+            <option key={year} value={year}>{year}</option>
+          ))}
+        </select>
+
+        {/* Apply Button */}
+        <button
+          onClick={handleApplyFilter}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+        >
+          <Filter className="w-4 h-4" />
+          Apply
+        </button>
+
+        {/* Clear Button - shown only when filter is active */}
+        {isFiltered && (
+          <button
+            onClick={handleClearFilter}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <X className="w-4 h-4" />
+            Clear
+          </button>
+        )}
+
+        {/* Active Filter Indicator */}
+        {isFiltered && (
+          <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full font-medium">
+            {selectedMonth ? months.find(m => m.value === selectedMonth)?.label : ''}
+            {selectedMonth && selectedYear ? ' ' : ''}
+            {selectedYear || ''}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
   const renderProductTable = () => {
     if (loading) {
       return (
@@ -655,7 +566,9 @@ export default function CompanyProductManagement({ cacheKey }) {
     if (products.length === 0) {
       return (
         <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-          <p className="text-gray-500">No company products found</p>
+          <p className="text-gray-500">
+            {isFiltered ? 'No products found for the selected filter' : 'No company products found'}
+          </p>
         </div>
       );
     }
@@ -663,71 +576,72 @@ export default function CompanyProductManagement({ cacheKey }) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S.No</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ice Cream</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ordered Qty</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ordered Amount</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Delivered Qty</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Delivered Amount</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {products.map((product, index) => {
-                const remaining = parseInt(product.remainingqty) || 0;
-                const status = getStockStatus(remaining);
-                return (
-                  <tr key={product.companyproductid} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {product.entry_date ? product.entry_date.split('T')[0] : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.icecreamname}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-full">
-                        {product.type}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.orderedqty}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-600">
-                      ₹{parseFloat(product.orderedamount || 0).toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-semibold">{product.deliveredqty}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
-                      ₹{parseFloat(product.deliveredamount || 0).toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${status.className}`}>
-                        {status.label}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEditClick(product)}
-                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors cursor-pointer"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product.companyproductid)}
-                          className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg transition-colors cursor-pointer"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">S.No</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Details</th>
+                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {products.map((product, index) => {
+                  const details = product.details;
+                  let items = Array.isArray(details) ? details : (details?.items || []);
+                  let totalOrdered = 0, totalDelivered = 0;
+                  items.forEach(item => {
+                    totalOrdered += parseFloat(item.OrderedQty || item.qty) || 0;
+                    totalDelivered += parseFloat(item.DeliveredQty || 0) || 0;
+                  });
+
+                  return (
+                    <tr
+                      key={product.companyproductid}
+                      className="hover:bg-blue-50/50 transition-colors duration-150"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 text-xs font-semibold text-gray-700">
+                          {index + 1}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-gray-400" />
+                          {product.entry_date ? product.entry_date.split('T')[0] : '-'}
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 text-sm text-gray-600 max-w-md">
+                        {renderDetails(product.details)}
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => handleEditClick(product)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(product.companyproductid)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     );
@@ -737,14 +651,9 @@ export default function CompanyProductManagement({ cacheKey }) {
     <div>
       {/* Toast Notification */}
       {toastVisible && (
-        <div className="fixed top-4 right-4 z-50 bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
+        <div className="fixed top-4 right-4 z-60 bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
           <span>{toastMessage}</span>
-          <button
-            onClick={() => setToastVisible(false)}
-            className="text-white hover:text-gray-200 font-bold text-lg leading-none cursor-pointer"
-          >
-            ×
-          </button>
+          <button onClick={() => setToastVisible(false)} className="text-white hover:text-gray-200 font-bold text-lg leading-none cursor-pointer">×</button>
         </div>
       )}
 
@@ -755,21 +664,8 @@ export default function CompanyProductManagement({ cacheKey }) {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Confirm Action</h3>
             <p className="text-sm text-gray-600 mb-6">{confirmMessage}</p>
             <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setConfirmVisible(false)}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors text-sm font-medium cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (confirmAction) confirmAction();
-                  setConfirmVisible(false);
-                }}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer"
-              >
-                Confirm
-              </button>
+              <button onClick={() => setConfirmVisible(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors text-sm font-medium cursor-pointer">Cancel</button>
+              <button onClick={() => { if (confirmAction) confirmAction(); setConfirmVisible(false); }} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer">Confirm</button>
             </div>
           </div>
         </div>
@@ -781,10 +677,7 @@ export default function CompanyProductManagement({ cacheKey }) {
             <h2 className="text-2xl font-semibold text-gray-900">Company Product Management</h2>
             <p className="text-sm text-gray-500 mt-1">Manage all company products and inventory</p>
           </div>
-          <button
-            onClick={handleAddClick}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-          >
+          <button onClick={handleAddClick} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 cursor-pointer">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
@@ -816,12 +709,13 @@ export default function CompanyProductManagement({ cacheKey }) {
           </div>
           <div className={`border rounded-lg p-3 ${summary.totalRemaining > 0 ? 'bg-orange-50 border-orange-200' : 'bg-red-50 border-red-200'}`}>
             <p className="text-xs text-gray-600">Total Remaining</p>
-            <p className={`text-xl font-bold ${summary.totalRemaining > 0 ? 'text-orange-600' : 'text-red-600'}`}>
-              {summary.totalRemaining}
-            </p>
+            <p className={`text-xl font-bold ${summary.totalRemaining > 0 ? 'text-orange-600' : 'text-red-600'}`}>{summary.totalRemaining}</p>
           </div>
         </div>
       </div>
+
+      {/* Filter Section */}
+      {renderFilter()}
 
       {renderProductTable()}
       {renderModal()}

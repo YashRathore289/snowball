@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { postData } from '@/Services';
-import { saveCache, getCache } from './ComponentCache';
+import { saveCache, getCache, clearCache } from './ComponentCache';
 
 export default function DebtManagement({ cacheKey }) {
   // Restore from cache if available
@@ -207,6 +207,7 @@ export default function DebtManagement({ cacheKey }) {
           amount: formData.amount
         });
         if (result?.status) {
+          clearCache(cacheKey);
           showToast('Debt record updated successfully!');
           setIsModalOpen(false);
           fetchSalesmanDebts(selectedSalesman.salesmanid);
@@ -222,6 +223,7 @@ export default function DebtManagement({ cacheKey }) {
           amount: formData.amount
         });
         if (result?.status) {
+          clearCache(cacheKey);
           showToast('Debt record added successfully!');
           setIsModalOpen(false);
           fetchSalesmanDebts(selectedSalesman.salesmanid);
@@ -241,6 +243,7 @@ export default function DebtManagement({ cacheKey }) {
     try {
       const result = await postData('debt/delete-debt', { debtid });
       if (result?.status) {
+        clearCache(cacheKey);
         showToast('Debt record deleted successfully!');
         fetchSalesmanDebts(selectedSalesman.salesmanid);
         fetchAllSalesmenDebtSummary(salesmen);
@@ -293,7 +296,7 @@ export default function DebtManagement({ cacheKey }) {
                     className={`px-4 py-2 rounded-lg border-2 transition-all cursor-pointer ${formData.type === 'give'
                       ? 'border-red-600 bg-red-50 text-red-700'
                       : 'border-gray-300 hover:border-gray-400'
-                    }`}
+                      }`}
                   >
                     Give Debt
                   </button>
@@ -303,7 +306,7 @@ export default function DebtManagement({ cacheKey }) {
                     className={`px-4 py-2 rounded-lg border-2 transition-all cursor-pointer ${formData.type === 'receive'
                       ? 'border-green-600 bg-green-50 text-green-700'
                       : 'border-gray-300 hover:border-gray-400'
-                    }`}
+                      }`}
                   >
                     Receive Debt
                   </button>
@@ -349,7 +352,7 @@ export default function DebtManagement({ cacheKey }) {
               className={`px-4 py-2 text-white rounded-lg transition-colors cursor-pointer ${formData.type === 'give'
                 ? 'bg-red-600 hover:bg-red-700'
                 : 'bg-green-600 hover:bg-green-700'
-              }`}
+                }`}
             >
               {isEditMode ? 'Update' : (formData.type === 'give' ? 'Give Debt' : 'Receive Debt')}
             </button>
@@ -400,13 +403,13 @@ export default function DebtManagement({ cacheKey }) {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S.No</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mobile</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Given</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Received</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">S.No</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Mobile</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Given</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Received</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Remaining</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -526,12 +529,12 @@ export default function DebtManagement({ cacheKey }) {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S.No</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Debt ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">S.No</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Debt ID</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -544,7 +547,7 @@ export default function DebtManagement({ cacheKey }) {
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${debt.type === 'give'
                           ? 'bg-red-100 text-red-700'
                           : 'bg-green-100 text-green-700'
-                        }`}>
+                          }`}>
                           {debt.type === 'give' ? 'Given' : 'Received'}
                         </span>
                       </td>

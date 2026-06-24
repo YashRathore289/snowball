@@ -38,7 +38,7 @@ const menuItems = [
     { id: 'products', label: 'Products', icon: Package },
     { id: 'batteries', label: 'Battery', icon: BatteryFull },
     { id: 'shop-goods', label: 'Shop Goods', icon: Truck },
-    { id: 'account', label: 'Account', icon: Calculator },
+    { id: 'account', label: 'Salesman Account', icon: Calculator },
 ];
 
 export default function Dashboard() {

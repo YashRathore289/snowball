@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { postData } from '@/Services';
-import { saveCache, getCache } from './ComponentCache';
+import { saveCache, getCache, clearCache } from './ComponentCache';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',

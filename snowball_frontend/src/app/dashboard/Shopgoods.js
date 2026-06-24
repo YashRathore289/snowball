@@ -189,6 +189,7 @@ export default function ShopGoodsManagement({ cacheKey }) {
         try {
             const result = await postData('shopowner/delete-shop-owner', { shopownerid });
             if (result?.status) {
+                clearCache(cacheKey);
                 showToast('Shop owner deleted successfully!');
                 await fetchShopOwners();
             } else {
@@ -222,7 +223,7 @@ export default function ShopGoodsManagement({ cacheKey }) {
                     mobileno: ownerFormData.mobileno,
                     address: ownerFormData.address
                 });
-                if (result?.status) showToast('Shop owner updated successfully!');
+                if (result?.status) clearCache(cacheKey); showToast('Shop owner updated successfully!');
             } else {
                 result = await postData('shopowner/insert-shop-owner', {
                     shopownername: ownerFormData.shopownername,
@@ -230,9 +231,10 @@ export default function ShopGoodsManagement({ cacheKey }) {
                     mobileno: ownerFormData.mobileno,
                     address: ownerFormData.address
                 });
-                if (result?.status) showToast('Shop owner added successfully!');
+                if (result?.status) clearCache(cacheKey); showToast('Shop owner added successfully!');
             }
             if (result?.status) {
+                clearCache(cacheKey);
                 setShowOwnerModal(false);
                 await fetchShopOwners();
             } else {
@@ -274,6 +276,7 @@ export default function ShopGoodsManagement({ cacheKey }) {
         try {
             const result = await postData('shopgoods/delete-shop-goods', { shopgoodsid });
             if (result?.status) {
+                clearCache(cacheKey);
                 showToast('Record deleted successfully!');
                 await fetchRecords();
                 await fetchShopOwners();
@@ -420,6 +423,7 @@ export default function ShopGoodsManagement({ cacheKey }) {
             const endpoint = isUpdate ? 'shopgoods/update-shop-goods' : 'shopgoods/insert-shop-goods';
             const result = await postData(endpoint, payload);
             if (result?.status) {
+                clearCache(cacheKey);
                 showToast(isUpdate ? 'Record updated successfully!' : 'Record saved successfully!');
                 let newId = null;
                 if (result.data) {
@@ -711,13 +715,13 @@ export default function ShopGoodsManagement({ cacheKey }) {
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shop Owner</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Commission (%)</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Final Amount</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">ID</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Shop Owner</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Date</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Items</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Commission (%)</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Final Amount</th>
+                            <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -767,12 +771,12 @@ export default function ShopGoodsManagement({ cacheKey }) {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner Name</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shop Name</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mobile</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                <th className="px-4 py-2 text-left text-xs font-bold text-black uppercase tracking-wider">ID</th>
+                                <th className="px-4 py-2 text-left text-xs font-bold text-black uppercase tracking-wider">Owner Name</th>
+                                <th className="px-4 py-2 text-left text-xs font-bold text-black uppercase tracking-wider">Shop Name</th>
+                                <th className="px-4 py-2 text-left text-xs font-bold text-black uppercase tracking-wider">Mobile</th>
+                                <th className="px-4 py-2 text-left text-xs font-bold text-black uppercase tracking-wider">Address</th>
+                                <th className="px-4 py-2 text-left text-xs font-bold text-black uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">

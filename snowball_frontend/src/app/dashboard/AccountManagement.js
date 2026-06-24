@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { postData } from '@/Services';
-import { saveCache, getCache } from './ComponentCache';
+import { saveCache, getCache, clearCache } from './ComponentCache';
 
 // Expression evaluator (same as HandedGoods)
 function evaluateExpression(expr) {
@@ -159,6 +159,7 @@ export default function AccountManagement({ cacheKey }) {
             });
 
             if (result?.status) {
+                clearCache(cacheKey);
                 showToast('Settlement saved successfully!');
                 fetchSalesmen();
                 fetchSalesmanEntries(selectedSalesman.salesmanid, fromDate, toDate);
@@ -197,13 +198,13 @@ export default function AccountManagement({ cacheKey }) {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S.No</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman Name</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mobile</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Item Total</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Submit</th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">S.No</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Salesman Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Mobile</th>
+                                <th className="px-6 py-3 text-right text-xs font-bold text-black uppercase tracking-wider">Item Total</th>
+                                <th className="px-6 py-3 text-right text-xs font-bold text-black uppercase tracking-wider">Total Submit</th>
+                                <th className="px-6 py-3 text-center text-xs font-bold text-black uppercase tracking-wider">Status</th>
+                                <th className="px-6 py-3 text-center text-xs font-bold text-black uppercase tracking-wider">Action</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -356,7 +357,7 @@ export default function AccountManagement({ cacheKey }) {
                         </div>
 
                         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                            <span className="text-sm font-medium text-gray-700">2. Return Amount (e.g., 80+74+90)</span>
+                            <span className="text-sm font-medium text-gray-700">2. Return Amount</span>
                             <input
                                 type="text"
                                 value={returnAmount}
@@ -367,7 +368,7 @@ export default function AccountManagement({ cacheKey }) {
                         </div>
 
                         <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                            <span className="text-sm font-medium text-gray-700">3. After Return (1 - 2)</span>
+                            <span className="text-sm font-medium text-gray-700">3. After Return</span>
                             <span className="text-lg font-bold text-blue-600">₹{afterReturn.toFixed(0)}</span>
                         </div>
 
@@ -383,12 +384,12 @@ export default function AccountManagement({ cacheKey }) {
                         </div>
 
                         <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                            <span className="text-sm font-medium text-gray-700">5. After Commission (3 - 4)</span>
+                            <span className="text-sm font-medium text-gray-700">5. After Commission</span>
                             <span className="text-lg font-bold text-blue-600">₹{afterCommission.toFixed(0)}</span>
                         </div>
 
                         <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-                            <span className="text-sm font-bold text-gray-700">6. Final Balance (5 - Total Submit)</span>
+                            <span className="text-sm font-bold text-gray-700">6. Final Balance</span>
                             <span className={`text-xl font-bold ${finalBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                 ₹{finalBalance.toFixed(0)}
                             </span>

@@ -1,18 +1,15 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { postData } from '@/Services';
-import { saveCache, getCache } from './ComponentCache';
+import { saveCache, getCache, clearCache } from './ComponentCache';
 
-// ---------- helpers (unchanged) ----------
-
+// ---------- helpers ----------
 function evaluateExpression(expr) {
   if (!expr || typeof expr !== 'string') return 0;
   const trimmed = expr.trim();
   if (trimmed === '') return 0;
-
   const isSafe = /^[0-9+\-*/().\s]+$/.test(trimmed);
   if (!isSafe) return null;
-
   try {
     const result = Function(`"use strict"; return (${trimmed})`)();
     if (typeof result !== 'number' || !isFinite(result)) return null;
@@ -29,6 +26,8 @@ function emptyRow() {
     productname: '',
     qty: '',
     price: '',
+    isAllBig: false,
+    allBigExpr: '',
   };
 }
 
@@ -54,6 +53,9 @@ function newCard(serial) {
 }
 
 const rowTotal = (row) => {
+  if (row.isAllBig) {
+    return evaluateExpression(row.allBigExpr) || 0;
+  }
   const q = parseFloat(row.qty);
   const p = parseFloat(row.price);
   if (isNaN(q) || isNaN(p)) return 0;
@@ -64,9 +66,7 @@ const cardItemsTotal = (card) =>
   card.rows.reduce((sum, r) => sum + rowTotal(r), 0);
 
 // ---------- component ----------
-
 export default function HandedGoodsManagement({ cacheKey }) {
-  // Restore from cache if available
   const cachedData = cacheKey ? getCache(cacheKey) : null;
 
   const [date, setDate] = useState(cachedData?.date || new Date().toISOString().split('T')[0]);
@@ -84,18 +84,20 @@ export default function HandedGoodsManagement({ cacheKey }) {
   const [loadingRecords, setLoadingRecords] = useState(false);
   const [assignedBatteries, setAssignedBatteries] = useState([]);
 
-  // ---- Toast & Confirmation popup states ----
+  // Cards saved per date
+  const [savedCards, setSavedCards] = useState({});
+  const [savedEditCards, setSavedEditCards] = useState({});
+
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [confirmMessage, setConfirmMessage] = useState('');
   const [confirmAction, setConfirmAction] = useState(null);
 
-  // Auto-dismiss toast after 5s
   useEffect(() => {
     if (!toastVisible) return;
-    const timer = setTimeout(() => setToastVisible(false), 5000);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => setToastVisible(false), 5000);
+    return () => clearTimeout(t);
   }, [toastVisible]);
 
   const showToast = useCallback((msg) => {
@@ -109,28 +111,26 @@ export default function HandedGoodsManagement({ cacheKey }) {
     setConfirmVisible(true);
   }, []);
 
-  // Save state to cache before unmounting
+  // Save cards when date changes
+  const handleDateChange = useCallback((newDate) => {
+    setSavedCards(prev => ({ ...prev, [date]: cards }));
+    setSavedEditCards(prev => ({ ...prev, [date]: editCards }));
+    setDate(newDate);
+  }, [date, cards, editCards]);
+
   useEffect(() => {
     return () => {
       if (cacheKey) {
-        saveCache(cacheKey, {
-          date,
-          salesmen,
-          products,
-          batteryOptions,
-        });
+        saveCache(cacheKey, { date, salesmen, products, batteryOptions });
       }
     };
   }, [cacheKey, date, salesmen, products, batteryOptions]);
 
-  // ---------- data fetching (memoized) ----------
-
+  // ---------- data fetching ----------
   const fetchSalesmen = useCallback(async () => {
     try {
       const result = await postData('employee/retrieve-salesmen-without-attendance', { date });
-      if (result?.status) {
-        setSalesmen(result.data || []);
-      }
+      if (result?.status) setSalesmen(result.data || []);
     } catch (error) {
       console.error('Error fetching salesmen:', error);
     }
@@ -139,9 +139,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
   const fetchProducts = useCallback(async () => {
     try {
       const result = await postData('product/retrieve-products', {});
-      if (result?.status) {
-        setProducts(result.data || []);
-      }
+      if (result?.status) setProducts(result.data || []);
     } catch (error) {
       console.error('Error fetching products:', error);
     }
@@ -150,9 +148,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
   const fetchBatteries = useCallback(async () => {
     try {
       const result = await postData('battery/retrieve-batteries', {});
-      if (result?.status) {
-        setBatteryOptions(result.data.map(b => b.batteryname));
-      }
+      if (result?.status) setBatteryOptions(result.data.map(b => b.batteryname));
     } catch (error) {
       console.error('Error fetching batteries:', error);
     }
@@ -190,10 +186,12 @@ export default function HandedGoodsManagement({ cacheKey }) {
   }, [fetchSalesmen, fetchProducts, fetchBatteries, fetchAssignedBatteries]);
 
   useEffect(() => {
-    if (!cachedData) {
-      fetchAllLookups();
-    }
-  }, [fetchAllLookups, cachedData]);
+    fetchAllLookups();
+  }, [fetchAllLookups]);
+
+  useEffect(() => {
+    fetchSalesmen();
+  }, [date, fetchSalesmen]);
 
   const fetchRecords = useCallback(async () => {
     setLoadingRecords(true);
@@ -206,11 +204,10 @@ export default function HandedGoodsManagement({ cacheKey }) {
       }
       const result = await postData('handedgoods/retrieve-handed-goods', payload);
       if (result?.status) {
-        const parsedRecords = result.data.map(record => ({
+        setRecords(result.data.map(record => ({
           ...record,
           details: typeof record.details === 'string' ? JSON.parse(record.details) : record.details
-        }));
-        setRecords(parsedRecords);
+        })));
       }
     } catch (error) {
       console.error('Error fetching records:', error);
@@ -220,13 +217,10 @@ export default function HandedGoodsManagement({ cacheKey }) {
   }, [filterType, date, filterMonth, filterYear]);
 
   useEffect(() => {
-    if (showRecords) {
-      fetchRecords();
-    }
+    if (showRecords) fetchRecords();
   }, [showRecords, fetchRecords]);
 
-  // ---------- card/row mutators (memoized) ----------
-
+  // ---------- card/row mutators ----------
   const updateCard = useCallback((cardid, patch, isEdit = false) => {
     const setter = isEdit ? setEditCards : setCards;
     setter(prev => prev.map(c => c.cardid === cardid ? { ...c, ...patch } : c));
@@ -237,7 +231,11 @@ export default function HandedGoodsManagement({ cacheKey }) {
     setter(prev =>
       prev.map(c => {
         if (c.cardid !== cardid) return c;
-        return { ...c, rows: c.rows.map(r => r.rowid === rowid ? { ...r, ...patch } : r), saved: false };
+        return {
+          ...c,
+          rows: c.rows.map(r => r.rowid === rowid ? { ...r, ...patch } : r),
+          saved: false
+        };
       })
     );
   }, []);
@@ -273,11 +271,25 @@ export default function HandedGoodsManagement({ cacheKey }) {
   }, [cards, editCards, assignedBatteries, updateCard, showToast]);
 
   const handleSelectProduct = useCallback((cardid, rowid, productid, isEdit = false) => {
+    if (productid === 'allbig') {
+      // 👈 NEW: Handle "All Big" selection
+      updateRow(cardid, rowid, {
+        productid: 'allbig',
+        productname: 'All Big',
+        isAllBig: true,
+        qty: '',
+        price: '',
+        allBigExpr: '',
+      }, isEdit);
+      return;
+    }
     const product = products.find(p => String(p.productid) === String(productid));
     updateRow(cardid, rowid, {
       productid,
       productname: product ? product.productname : '',
       price: product ? product.productprice : '',
+      isAllBig: false,
+      allBigExpr: '',
     }, isEdit);
   }, [products, updateRow]);
 
@@ -292,8 +304,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
     const setter = isEdit ? setEditCards : setCards;
     setter(prev =>
       prev.map(c => {
-        if (c.cardid !== cardid) return c;
-        if (c.rows.length === 1) return c;
+        if (c.cardid !== cardid || c.rows.length === 1) return c;
         return { ...c, rows: c.rows.filter(r => r.rowid !== rowid) };
       })
     );
@@ -320,8 +331,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
     });
   }, [showConfirm]);
 
-  // ---------- derived values (memoized) ----------
-
+  // ---------- derived values ----------
   const getReturnValue = useCallback((card) => evaluateExpression(card.returnExpr), []);
 
   const getFinalAmount = useCallback((card) => {
@@ -341,14 +351,19 @@ export default function HandedGoodsManagement({ cacheKey }) {
     return Math.round((total - commissionVal) * 100) / 100;
   }, [getReturnValue]);
 
-  // ---------- save (memoized) ----------
-
+  // ---------- save ----------
   const handleSave = useCallback(async (card, isEdit = false) => {
     if (!card.salesmanid) {
       showToast('Please select a salesman first');
       return;
     }
-    const validRows = card.rows.filter(r => r.productid && r.qty && r.price);
+    
+    // 👈 CHANGED: Allow All Big rows without qty/price
+    const validRows = card.rows.filter(r => {
+      if (r.isAllBig) return r.allBigExpr && r.allBigExpr.trim();
+      return r.productid && r.qty && r.price;
+    });
+    
     if (validRows.length === 0) {
       showToast('Add at least one item with name, quantity and price');
       return;
@@ -359,19 +374,33 @@ export default function HandedGoodsManagement({ cacheKey }) {
       return;
     }
     const finalAmount = getFinalAmountForDB(card);
+    const saveDate = card.handedgoodsid ? (card.cardDate || date) : date;
 
     const payload = {
       salesmanid: card.salesmanid,
-      date,
+      date: saveDate,
       details: JSON.stringify({
         batteries: card.batteries || [],
-        items: validRows.map(r => ({
-          productid: r.productid,
-          productname: r.productname,
-          qty: parseFloat(r.qty),
-          price: parseFloat(r.price),
-          total: rowTotal(r),
-        }))
+        items: validRows.map(r => {
+          if (r.isAllBig) {
+            return {
+              productid: 'allbig',
+              productname: 'All Big',
+              qty: evaluateExpression(r.allBigExpr) || 0,
+              price: 1,
+              total: evaluateExpression(r.allBigExpr) || 0,
+              isAllBig: true,
+              allBigExpr: r.allBigExpr,
+            };
+          }
+          return {
+            productid: r.productid,
+            productname: r.productname,
+            qty: parseFloat(r.qty),
+            price: parseFloat(r.price),
+            total: rowTotal(r),
+          };
+        })
       }),
       returnamt: returnVal,
       commission: parseFloat(card.commission) || 0,
@@ -390,6 +419,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
       const endpoint = isUpdate ? 'handedgoods/update-handed-goods' : 'handedgoods/insert-handed-goods';
       const result = await postData(endpoint, payload);
       if (result?.status) {
+        clearCache(cacheKey);
         showToast(isUpdate ? 'Record updated successfully!' : 'Record saved successfully!');
         let newId = null;
         if (result.data) {
@@ -401,6 +431,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
           editMode: false,
           isUpdateMode: true,
           handedgoodsid: newId || card.handedgoodsid,
+          cardDate: saveDate,
         }, isEdit);
 
         await Promise.all([
@@ -409,9 +440,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
         ]);
 
         if (isEdit) {
-          setTimeout(() => {
-            setEditCards([]);
-          }, 1500);
+          setTimeout(() => setEditCards([]), 1500);
         }
       } else {
         showToast(result?.message || 'Failed to save record');
@@ -422,10 +451,9 @@ export default function HandedGoodsManagement({ cacheKey }) {
       showToast('Error saving record');
       updateCard(card.cardid, { saving: false }, isEdit);
     }
-  }, [date, getReturnValue, getFinalAmountForDB, updateCard, fetchAssignedBatteries, fetchRecords, showRecords, showToast]);
+  }, [date, getReturnValue, getFinalAmountForDB, updateCard, fetchAssignedBatteries, fetchRecords, showRecords, showToast, cacheKey]);
 
-  // ---------- edit / delete record (memoized) ----------
-
+  // ---------- edit / delete record ----------
   const handleEditRecord = useCallback((record) => {
     setEditCards([]);
     const newCardData = newCard(1);
@@ -439,6 +467,8 @@ export default function HandedGoodsManagement({ cacheKey }) {
       productname: item.productname || '',
       qty: item.qty || '',
       price: item.price || '',
+      isAllBig: item.isAllBig || false,
+      allBigExpr: item.allBigExpr || '',
     })) || [emptyRow()];
     newCardData.returnExpr = String(record.returnamt || '');
     newCardData.commission = String(record.commission || '');
@@ -446,6 +476,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
     newCardData.submitAmount = String(record.submit_amount || '');
     newCardData.editMode = true;
     newCardData.handedgoodsid = record.handedgoodsid;
+    newCardData.cardDate = record.date;
     newCardData.saved = false;
     newCardData.isUpdateMode = true;
     setEditCards([newCardData]);
@@ -456,6 +487,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
     try {
       const result = await postData('handedgoods/delete-handed-goods', { handedgoodsid });
       if (result?.status) {
+        clearCache(cacheKey);
         showToast('Record deleted successfully!');
         await fetchRecords();
         await fetchAssignedBatteries();
@@ -466,14 +498,13 @@ export default function HandedGoodsManagement({ cacheKey }) {
       console.error('Error deleting record:', error);
       showToast('Error deleting record');
     }
-  }, [fetchRecords, fetchAssignedBatteries, showToast]);
+  }, [fetchRecords, fetchAssignedBatteries, showToast, cacheKey]);
 
   const handleDeleteRecord = useCallback((handedgoodsid) => {
     showConfirm('Are you sure you want to delete this record?', () => performDelete(handedgoodsid));
   }, [showConfirm, performDelete]);
 
   // ---------- render helpers ----------
-
   const inputBase = 'border border-gray-300 rounded-md px-2 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white';
 
   const BatteryDropdown = ({ card, isEdit }) => {
@@ -496,7 +527,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
       <div className="relative" ref={dropdownRef}>
         <div
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center justify-between bg-white border border-gray-300 rounded-md px-3 py-1.5 text-sm cursor-pointer hover:border-blue-500 transition-colors min-w-[200px]"
+          className="flex items-center justify-between bg-white border border-gray-300 rounded-md px-3 py-1.5 text-sm cursor-pointer hover:border-blue-500 transition-colors min-w-[160px]"
         >
           <span className="text-gray-700">
             {selectedCount > 0 ? (
@@ -567,7 +598,6 @@ export default function HandedGoodsManagement({ cacheKey }) {
   };
 
   // ---------- card rendering ----------
-
   const renderCard = useCallback((card, isEdit = false) => {
     const otherSelectedSalesmanIds = new Set(
       [...cards, ...editCards]
@@ -578,6 +608,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
 
     return (
       <div key={card.cardid} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 relative">
+        {/* Remove/Close button */}
         {!isEdit && !card.editMode && (
           <button
             onClick={() => removeCard(card.cardid, isEdit)}
@@ -602,6 +633,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
           </button>
         )}
 
+        {/* Status badges */}
         {card.editMode && (
           <span className="absolute top-2 right-8 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
             Edit Mode
@@ -614,13 +646,17 @@ export default function HandedGoodsManagement({ cacheKey }) {
           </span>
         )}
 
-        <div className={`${inputBase} inline-block mb-3 font-medium bg-gray-50`}>
-          <div className="flex items-center gap-2">
-            <span className="text-gray-700">#{card.serial} -</span>
+        {/* ---- THREE SEPARATE BOXES ---- */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          {/* Box 1: Salesman */}
+          <div className="bg-blue-50/50 border border-blue-200 rounded-lg p-3">
+            <span className="text-xs font-semibold text-blue-600 uppercase tracking-wide block mb-2">
+              Salesman
+            </span>
             <select
               value={card.salesmanid || ''}
               onChange={(e) => handleSelectSalesman(card.cardid, e.target.value, isEdit)}
-              className="border-none outline-none text-sm bg-transparent cursor-pointer"
+              className={`${inputBase} w-full cursor-pointer`}
             >
               <option value="">Select salesman</option>
               {availableSalesmen.map(s => (
@@ -634,11 +670,28 @@ export default function HandedGoodsManagement({ cacheKey }) {
                 </option>
               )}
             </select>
-            {card.salesmanLocked && <><span className="text-sm font-medium text-gray-700">Batteries:</span>
-              <BatteryDropdown card={card} isEdit={isEdit} /></>}
+          </div>
+
+          {/* Box 2: Batteries */}
+          <div className="bg-purple-50/50 border border-purple-200 rounded-lg p-3">
+            <span className="text-xs font-semibold text-purple-600 uppercase tracking-wide block mb-2">
+              Batteries
+            </span>
+            <BatteryDropdown card={card} isEdit={isEdit} />
+          </div>
+
+          {/* Box 3: Date */}
+          <div className="bg-green-50/50 border border-green-200 rounded-lg p-3">
+            <span className="text-xs font-semibold text-green-600 uppercase tracking-wide block mb-2">
+              Date
+            </span>
+            <div className={`${inputBase} w-full bg-gray-50 text-gray-700 font-medium`}>
+              {card.cardDate || date}
+            </div>
           </div>
         </div>
 
+        {/* Items section (only when salesman is selected) */}
         {card.salesmanLocked && (
           <div className="space-y-3">
             {card.rows.map((row, idx) => {
@@ -651,26 +704,48 @@ export default function HandedGoodsManagement({ cacheKey }) {
                     className={`${inputBase} flex-1 min-w-0 cursor-pointer`}
                   >
                     <option value="">Select Ice Cream</option>
+                    {/* 👈 NEW: All Big option */}
+                    <option value="allbig" className="font-bold text-purple-600">🔹 All Big</option>
+                    <option disabled>──────────</option>
                     {products.map(p => (
                       <option key={p.productid} value={p.productid}>
                         {p.productname} (₹{parseFloat(p.productprice || 0).toFixed(2)})
                       </option>
                     ))}
                   </select>
-                  <input
-                    type="text" inputMode="numeric" placeholder="Qty"
-                    value={row.qty}
-                    onChange={(e) => updateRow(card.cardid, row.rowid, { qty: e.target.value }, isEdit)}
-                    className={`${inputBase} w-14 text-center`}
-                  />
-                  <input
-                    type="text" inputMode="numeric" placeholder="Price"
-                    value={row.price} readOnly
-                    className={`${inputBase} w-14 text-center bg-gray-100 cursor-not-allowed`}
-                  />
-                  <div className={`${inputBase} w-20 text-end bg-gray-50 text-gray-700`}>
-                    ₹{rowTotal(row).toFixed(0)}
-                  </div>
+
+                  {/* 👈 CHANGED: Show expression box for All Big, otherwise qty/price */}
+                  {row.isAllBig ? (
+                    <>
+                      <input
+                        type="text"
+                        placeholder="e.g. 10+23+45"
+                        value={row.allBigExpr}
+                        onChange={(e) => updateRow(card.cardid, row.rowid, { allBigExpr: e.target.value }, isEdit)}
+                        className={`${inputBase} flex-1 min-w-0`}
+                      />
+                      <div className={`${inputBase} w-20 text-end bg-gray-50 text-gray-700`}>
+                        ₹{(evaluateExpression(row.allBigExpr) || 0).toFixed(0)}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        type="text" inputMode="numeric" placeholder="Qty"
+                        value={row.qty}
+                        onChange={(e) => updateRow(card.cardid, row.rowid, { qty: e.target.value }, isEdit)}
+                        className={`${inputBase} w-14 text-center`}
+                      />
+                      <input
+                        type="text" inputMode="numeric" placeholder="Price"
+                        value={row.price} readOnly
+                        className={`${inputBase} w-14 text-center bg-gray-100 cursor-not-allowed`}
+                      />
+                      <div className={`${inputBase} w-20 text-end bg-gray-50 text-gray-700`}>
+                        ₹{rowTotal(row).toFixed(0)}
+                      </div>
+                    </>
+                  )}
 
                   {isLastRow ? (
                     <button
@@ -683,7 +758,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
                     <button
                       onClick={() => removeRow(card.cardid, row.rowid, isEdit)}
                       title="Remove row"
-                      className="w-15 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
+                      className="text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
                     >
                       ×
                     </button>
@@ -692,6 +767,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
               );
             })}
 
+            {/* Totals and calculations */}
             <div className="flex items-center justify-end gap-2 pt-1 border-t border-gray-100 pr-17">
               <span className="text-sm font-medium text-gray-700">Items Total:</span>
               <div className={`${inputBase} w-20 text-end bg-gray-50 font-medium`}>
@@ -743,9 +819,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-gray-700">Submit Amount:</span>
                 <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="0"
+                  type="text" inputMode="numeric" placeholder="0"
                   value={card.submitAmount}
                   onChange={(e) => updateCard(card.cardid, { submitAmount: e.target.value, saved: false }, isEdit)}
                   className={`${inputBase} w-24 text-end`}
@@ -757,6 +831,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
               </div>
             </div>
 
+            {/* Save button */}
             <div className="flex justify-end pt-2 pr-17">
               <button
                 onClick={() => handleSave(card, isEdit)}
@@ -786,10 +861,9 @@ export default function HandedGoodsManagement({ cacheKey }) {
         )}
       </div>
     );
-  }, [cards, editCards, salesmen, products, assignedBatteries, handleSelectSalesman, handleSelectProduct, updateRow, updateCard, addRow, removeRow, removeCard, handleSave, getReturnValue, getFinalAmount, showConfirm, showRecords, fetchRecords]);
+  }, [cards, editCards, salesmen, products, assignedBatteries, date, handleSelectSalesman, handleSelectProduct, updateRow, updateCard, addRow, removeRow, removeCard, handleSave, getReturnValue, getFinalAmount, showConfirm, showRecords, fetchRecords]);
 
-  // ---------- records table rendering ----------
-
+  // ---------- records table ----------
   const renderRecordsTable = useCallback(() => {
     if (loadingRecords) {
       return (
@@ -810,15 +884,15 @@ export default function HandedGoodsManagement({ cacheKey }) {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batteries</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Return</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Commission</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Final Amount</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">ID</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Salesman</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Date</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Batteries</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Items</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Return</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Commission</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Final Amount</th>
+              <th className="px-4 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -830,7 +904,13 @@ export default function HandedGoodsManagement({ cacheKey }) {
                 <td className="px-4 py-3 text-sm text-gray-500">
                   {record.details?.batteries?.length > 0 ? record.details.batteries.join(', ') : '-'}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-500">{record.details?.items?.length || 0} items</td>
+                <td className="px-4 py-3 text-sm text-gray-500">
+                  {record.details?.items?.map((item, i) => (
+                    <div key={i} className="text-xs">
+                      {item.productname}: {item.isAllBig ? `₹${item.total}` : `${item.qty} × ₹${item.price} = ₹${item.total}`}
+                    </div>
+                  ))}
+                </td>
                 <td className="px-4 py-3 text-sm text-gray-500">₹{parseFloat(record.returnamt || 0).toFixed(0)}</td>
                 <td className="px-4 py-3 text-sm text-gray-500">₹{parseFloat(record.commission || 0).toFixed(0)}</td>
                 <td className="px-4 py-3 text-sm font-semibold text-blue-600">₹{parseFloat(record.finalamount || 0).toFixed(0)}</td>
@@ -859,7 +939,6 @@ export default function HandedGoodsManagement({ cacheKey }) {
   }, [loadingRecords, records, filterType, handleEditRecord, handleDeleteRecord]);
 
   // ---------- main return ----------
-
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       {/* Toast Notification */}
@@ -902,13 +981,14 @@ export default function HandedGoodsManagement({ cacheKey }) {
         </div>
       )}
 
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className={`${inputBase} flex items-center gap-2 font-medium`}>
           <span className="text-black text-lg font-bold">Date:</span>
           <input
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => handleDateChange(e.target.value)}
             className="border-none outline-none text-lg font-bold bg-transparent cursor-pointer"
           />
         </div>
@@ -938,6 +1018,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
         <p className="text-center text-sm text-gray-400 mb-4">Loading...</p>
       )}
 
+      {/* Records Section */}
       {showRecords && (
         <div className="mb-6">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -956,7 +1037,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
                   <input
                     type="date"
                     value={date}
-                    onChange={(e) => setDate(e.target.value)}
+                    onChange={(e) => { setDate(e.target.value) }}
                     className="px-3 py-1.5 border border-gray-300 rounded-md text-sm cursor-pointer"
                   />
                 ) : (
@@ -990,6 +1071,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
         </div>
       )}
 
+      {/* Cards Section */}
       {editCards.length > 0 ? (
         <div>
           <div className="flex items-center justify-between mb-3">

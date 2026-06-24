@@ -14,7 +14,7 @@ export default function Calculators() {
     useEffect(() => {
         setPosition({ x: window.innerWidth - 320, y: 100 });
     }, []);
-    // Handle drag start
+
     const handleMouseDown = useCallback((e) => {
         setIsDragging(true);
         offsetRef.current = {
@@ -23,7 +23,6 @@ export default function Calculators() {
         };
     }, [position]);
 
-    // Handle drag move
     useEffect(() => {
         const handleMouseMove = (e) => {
             if (!isDragging) return;
@@ -47,7 +46,6 @@ export default function Calculators() {
         };
     }, [isDragging]);
 
-    // Calculator functions
     const handleNumber = (num) => {
         if (display === '0' || display === 'Error') {
             setDisplay(num);
@@ -83,7 +81,12 @@ export default function Calculators() {
 
     const calculate = () => {
         try {
-            const sanitized = display.replace(/[^0-9+\-*/().]/g, '');
+            let expr = display;
+            
+            // Handle percentage: 100*10% → 100*10/100 = 10
+            expr = expr.replace(/(\d+\.?\d*)%/g, '($1/100)');
+            
+            const sanitized = expr.replace(/[^0-9+\-*/().]/g, '');
             const result = Function(`"use strict"; return (${sanitized})`)();
 
             if (typeof result !== 'number' || !isFinite(result)) {
@@ -98,57 +101,45 @@ export default function Calculators() {
         }
     };
 
-    // ========== NEW: Keyboard Support ==========
+    // Keyboard Support - ONLY when calculator is OPEN and FOCUSED
     useEffect(() => {
         if (!isOpen) return;
 
         const handleKeyDown = (e) => {
-            // Allow keyboard shortcuts only when calculator is open
+            // Only handle if calculator modal is focused (click inside it first)
+            const calcModal = document.querySelector('[data-calculator="modal"]');
+            if (!calcModal || !calcModal.contains(document.activeElement)) return;
+
             const key = e.key;
 
-            // Numbers 0-9
             if (key >= '0' && key <= '9') {
                 e.preventDefault();
                 handleNumber(key);
-            }
-            // Operators
-            else if (key === '+') {
+            } else if (key === '+') {
                 e.preventDefault();
                 handleOperator('+');
-            }
-            else if (key === '-') {
+            } else if (key === '-') {
                 e.preventDefault();
                 handleOperator('-');
-            }
-            else if (key === '*') {
+            } else if (key === '*') {
                 e.preventDefault();
                 handleOperator('*');
-            }
-            else if (key === '/') {
+            } else if (key === '/') {
                 e.preventDefault();
                 handleOperator('/');
-            }
-            else if (key === '%') {
+            } else if (key === '%') {
                 e.preventDefault();
                 handleOperator('%');
-            }
-            // Decimal point
-            else if (key === '.') {
+            } else if (key === '.') {
                 e.preventDefault();
                 handleDecimal();
-            }
-            // Calculate (Enter or =)
-            else if (key === 'Enter' || key === '=') {
+            } else if (key === 'Enter' || key === '=') {
                 e.preventDefault();
                 calculate();
-            }
-            // Backspace to delete
-            else if (key === 'Backspace') {
+            } else if (key === 'Backspace') {
                 e.preventDefault();
                 handleDelete();
-            }
-            // Delete or Escape to clear
-            else if (key === 'Delete' || key === 'Escape') {
+            } else if (key === 'Delete' || key === 'Escape') {
                 e.preventDefault();
                 handleClear();
             }
@@ -156,7 +147,7 @@ export default function Calculators() {
 
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, display]); // Re-attach when display changes
+    }, [isOpen, display]);
 
     const buttons = [
         ['C', '⌫', '%', '/'],
@@ -167,11 +158,20 @@ export default function Calculators() {
     ];
 
     const getButtonClass = (btn) => {
-        if (btn === '=') return 'bg-blue-600 hover:bg-blue-700 text-white font-bold';
-        if (btn === 'C') return 'bg-red-500 hover:bg-red-600 text-white font-bold';
-        if (btn === '⌫') return 'bg-orange-500 hover:bg-orange-600 text-white';
-        if (['/', '*', '-', '+', '%'].includes(btn)) return 'bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold';
-        return 'bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium';
+        if (btn === '=') return 'bg-blue-600 hover:bg-blue-700 text-white font-bold text-xl';
+        if (btn === 'C') return 'bg-red-500 hover:bg-red-600 text-white font-semibold';
+        if (btn === '⌫') return 'bg-orange-500 hover:bg-orange-600 text-white font-semibold';
+        if (['/', '*', '-', '+'].includes(btn)) return 'bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold text-xl';
+        if (btn === '%') return 'bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold';
+        if (btn === '0') return 'bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold col-span-1';
+        return 'bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold text-xl';
+    };
+
+    const getButtonDisplay = (btn) => {
+        if (btn === '*') return '×';
+        if (btn === '/') return '÷';
+        if (btn === '-') return '−';
+        return btn;
     };
 
     const handleButtonClick = (btn) => {
@@ -187,7 +187,6 @@ export default function Calculators() {
 
     return (
         <>
-            {/* Toggle Button - Always visible */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 cursor-pointer relative"
@@ -196,19 +195,20 @@ export default function Calculators() {
                 <Calculator className="w-5 h-5" />
             </button>
 
-            {/* Calculator Modal */}
             {isOpen && (
                 <div
                     ref={dragRef}
+                    data-calculator="modal"
+                    tabIndex={-1}
                     style={{
                         position: 'fixed',
                         left: `${position.x}px`,
                         top: `${position.y}px`,
                         zIndex: 9999,
                     }}
-                    className="bg-white rounded-xl shadow-2xl border border-gray-200 w-72 overflow-hidden"
+                    className="bg-white rounded-xl shadow-2xl border border-gray-200 w-72 overflow-hidden outline-none"
+                    onMouseDown={() => dragRef.current?.focus()}
                 >
-                    {/* Header - Draggable */}
                     <div
                         onMouseDown={handleMouseDown}
                         className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 flex items-center justify-between cursor-move select-none"
@@ -224,7 +224,6 @@ export default function Calculators() {
                         </button>
                     </div>
 
-                    {/* Display */}
                     <div className="p-4 bg-gray-50 border-b border-gray-200">
                         {expression && (
                             <div className="text-xs text-gray-400 text-right mb-1">{expression}</div>
@@ -234,11 +233,9 @@ export default function Calculators() {
                         </div>
                     </div>
 
-                    {/* Buttons */}
                     <div className="p-3">
                         <div className="grid grid-cols-4 gap-2">
                             {buttons.map((row, i) => {
-                                // Handle the special case for row with 3 buttons
                                 if (i === 4) {
                                     return (
                                         <div key={i} className="col-span-4 grid grid-cols-4 gap-2">
@@ -246,15 +243,15 @@ export default function Calculators() {
                                                 <button
                                                     key={btn}
                                                     onClick={() => handleButtonClick(btn)}
-                                                    className={`${getButtonClass(btn)} h-12 rounded-lg text-lg transition-colors cursor-pointer active:scale-95`}
+                                                    className={`${getButtonClass(btn)} h-12 rounded-lg transition-colors cursor-pointer active:scale-95`}
                                                 >
-                                                    {btn}
+                                                    {getButtonDisplay(btn)}
                                                 </button>
                                             ))}
                                             <button
                                                 key="="
                                                 onClick={() => handleButtonClick('=')}
-                                                className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 rounded-lg text-lg transition-colors cursor-pointer active:scale-95"
+                                                className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xl h-12 rounded-lg transition-colors cursor-pointer active:scale-95"
                                             >
                                                 =
                                             </button>
@@ -265,9 +262,9 @@ export default function Calculators() {
                                     <button
                                         key={btn}
                                         onClick={() => handleButtonClick(btn)}
-                                        className={`${getButtonClass(btn)} h-12 rounded-lg text-lg transition-colors cursor-pointer active:scale-95`}
+                                        className={`${getButtonClass(btn)} h-12 rounded-lg transition-colors cursor-pointer active:scale-95`}
                                     >
-                                        {btn}
+                                        {getButtonDisplay(btn)}
                                     </button>
                                 ));
                             })}

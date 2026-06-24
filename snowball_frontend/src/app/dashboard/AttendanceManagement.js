@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { postData } from '@/Services';
-import { saveCache, getCache } from './ComponentCache';
+import { saveCache, getCache, clearCache } from './ComponentCache';
 
 export default function AttendanceManagement({ cacheKey }) {
     // Restore from cache if available
@@ -90,7 +90,14 @@ export default function AttendanceManagement({ cacheKey }) {
                 status,
             });
             if (result?.status) {
-                fetchAttendance();
+                clearCache(cacheKey);
+                // Directly fetch fresh data
+                const freshResult = await postData('attendance/retrieve-attendance', {
+                    attendance_date: selectedDate,
+                });
+                if (freshResult?.status) {
+                    setAttendance(freshResult.data);
+                }
             } else {
                 showToast(result?.message || 'Failed to mark attendance');
             }
@@ -98,7 +105,7 @@ export default function AttendanceManagement({ cacheKey }) {
             console.error('Error marking attendance:', error);
             showToast('Error marking attendance');
         }
-    }, [selectedDate, fetchAttendance, showToast]);
+    }, [selectedDate, showToast, cacheKey]);
 
     // Batch mark all salesmen
     const markAllAttendance = useCallback(async (status) => {
@@ -112,8 +119,15 @@ export default function AttendanceManagement({ cacheKey }) {
                 attendance_date: selectedDate,
             });
             if (result?.status) {
+                clearCache(cacheKey);
                 showToast(`All marked as ${status} successfully!`);
-                fetchAttendance();
+                // Directly fetch fresh data instead of using the memoized fetchAttendance
+                const freshResult = await postData('attendance/retrieve-attendance', {
+                    attendance_date: selectedDate,
+                });
+                if (freshResult?.status) {
+                    setAttendance(freshResult.data);
+                }
             } else {
                 showToast(result?.message || 'Failed to mark all');
             }
@@ -121,13 +135,14 @@ export default function AttendanceManagement({ cacheKey }) {
             console.error('Error batch marking:', error);
             showToast('Error marking attendance');
         }
-    }, [salesmen, selectedDate, fetchAttendance, showToast]);
+    }, [salesmen, selectedDate, showToast, cacheKey]);
 
     // Delete attendance record
     const performDelete = useCallback(async (attendanceid) => {
         try {
             const result = await postData('attendance/delete-attendance', { attendanceid });
             if (result?.status) {
+                clearCache(cacheKey);
                 showToast('Attendance record deleted successfully!');
                 fetchAttendance();
             } else {
@@ -236,15 +251,15 @@ export default function AttendanceManagement({ cacheKey }) {
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
                     <div>
-                        <label className="text-sm font-medium text-gray-700">Date</label>
+                        <label className="text-sm font-bold text-black">Date</label>
                         <input
                             type="date"
                             value={selectedDate}
                             onChange={(e) => setSelectedDate(e.target.value)}
-                            className="ml-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            className="ml-2 px-3 py-2 border border-gray-300 rounded-lg font-bold text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                         />
                     </div>
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm font-bold text-black">
                         {new Date(selectedDate).toLocaleDateString('en-US', {
                             weekday: 'long',
                             year: 'numeric',
@@ -275,10 +290,10 @@ export default function AttendanceManagement({ cacheKey }) {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S.No</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman Name</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">S.No</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Salesman Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Status</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">

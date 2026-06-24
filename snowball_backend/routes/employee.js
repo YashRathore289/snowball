@@ -47,7 +47,7 @@ router.post("/retrieve-salesman", (req, res) => {
         salesmanid, fullname, photo, fathername, mothername,
         DATE_FORMAT(dob, '%Y-%m-%d') AS dob, age, married,
         permanentaddress, currentaddress, mobileno, emergencymobileno,
-        whatsappno, idproof, incomedetail, bankname, accountno,
+        whatsappno, idproof, bankname, accountno,
         ifsccode, aadharno, panno, licenseno,
         salesmansignature, ownersignature,
         DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
@@ -59,7 +59,7 @@ router.post("/retrieve-salesman", (req, res) => {
         salesmanid, fullname, photo, fathername, mothername,
         DATE_FORMAT(dob, '%Y-%m-%d') AS dob, age, married,
         permanentaddress, currentaddress, mobileno, emergencymobileno,
-        whatsappno, idproof, incomedetail, bankname, accountno,
+        whatsappno, idproof, bankname, accountno,
         ifsccode, aadharno, panno, licenseno,
         salesmansignature, ownersignature,
         DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
@@ -137,7 +137,7 @@ router.post("/insert-salesman", upload.fields([
     const query = `INSERT INTO salesman (
       fullname, photo, fathername, mothername, dob, age, married,
       permanentaddress, currentaddress, mobileno, emergencymobileno,
-      whatsappno, idproof, incomedetail, bankname, accountno,
+      whatsappno, idproof, bankname, accountno,
       ifsccode, aadharno, panno, licenseno,
       salesmansignature, ownersignature, createdat, updatedat
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`;
@@ -156,7 +156,6 @@ router.post("/insert-salesman", upload.fields([
       req.body.emergencymobileno || null,
       req.body.whatsappno || null,
       idproof,
-      req.body.incomedetail || 0,
       req.body.bankname || null,
       req.body.accountno || null,
       req.body.ifsccode || null,
@@ -178,7 +177,7 @@ router.post("/insert-salesman", upload.fields([
         salesmanid, fullname, photo, fathername, mothername,
         DATE_FORMAT(dob, '%Y-%m-%d') AS dob, age, married,
         permanentaddress, currentaddress, mobileno, emergencymobileno,
-        whatsappno, idproof, incomedetail, bankname, accountno,
+        whatsappno, idproof, bankname, accountno,
         ifsccode, aadharno, panno, licenseno,
         salesmansignature, ownersignature,
         DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
@@ -222,7 +221,7 @@ router.post("/update-salesman", upload.fields([
     const textFields = [
       'fullname', 'fathername', 'mothername', 'dob', 'age', 'married',
       'permanentaddress', 'currentaddress', 'mobileno', 'emergencymobileno',
-      'whatsappno', 'incomedetail', 'bankname', 'accountno',
+      'whatsappno', 'bankname', 'accountno',
       'ifsccode', 'aadharno', 'panno', 'licenseno'
     ];
 
@@ -260,7 +259,7 @@ router.post("/update-salesman", upload.fields([
         salesmanid, fullname, photo, fathername, mothername,
         DATE_FORMAT(dob, '%Y-%m-%d') AS dob, age, married,
         permanentaddress, currentaddress, mobileno, emergencymobileno,
-        whatsappno, idproof, incomedetail, bankname, accountno,
+        whatsappno, idproof, bankname, accountno,
         ifsccode, aadharno, panno, licenseno,
         salesmansignature, ownersignature,
         DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,

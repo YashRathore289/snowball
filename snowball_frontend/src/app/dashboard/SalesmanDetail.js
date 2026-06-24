@@ -1,23 +1,21 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react';
-import { postData, serverURL } from '@/Services';
-import { saveCache, getCache } from './ComponentCache';
+import { postData } from '@/Services';
+import { saveCache, getCache, clearCache } from './ComponentCache';
 
-// Static fields definition (no dependency on state)
 const FIELDS = [
     { key: 'salesmanid', label: 'Salesman ID', editable: false, addMode: false },
     { key: 'fullname', label: 'Full Name', editable: true, addMode: true },
     { key: 'fathername', label: 'Father Name', editable: true, addMode: true },
     { key: 'mothername', label: 'Mother Name', editable: true, addMode: true },
     { key: 'dob', label: 'Date of Birth', editable: true, addMode: true, type: 'date' },
-    { key: 'age', label: 'Age', editable: true, addMode: true, type: 'number' },
+    { key: 'age', label: 'Age', editable: false, addMode: false },
     { key: 'married', label: 'Married', editable: true, addMode: true, type: 'select', options: ['Yes', 'No'] },
     { key: 'permanentaddress', label: 'Permanent Address', editable: true, addMode: true },
     { key: 'currentaddress', label: 'Current Address', editable: true, addMode: true },
     { key: 'mobileno', label: 'Mobile Number', editable: true, addMode: true },
     { key: 'emergencymobileno', label: 'Emergency Mobile', editable: true, addMode: true },
     { key: 'whatsappno', label: 'WhatsApp Number', editable: true, addMode: true },
-    { key: 'incomedetail', label: 'Income Detail', editable: true, addMode: true, type: 'number' },
     { key: 'bankname', label: 'Bank Name', editable: true, addMode: true },
     { key: 'accountno', label: 'Account Number', editable: true, addMode: true },
     { key: 'ifsccode', label: 'IFSC Code', editable: true, addMode: true },
@@ -28,33 +26,47 @@ const FIELDS = [
     { key: 'updatedat', label: 'Updated At', editable: false, addMode: false },
 ];
 
-// Category grouping
 const CATEGORIES = [
-    {
-        name: 'Personal Information',
-        fields: ['fullname', 'fathername', 'mothername', 'dob', 'age', 'married'],
-    },
-    {
-        name: 'Address Details',
-        fields: ['permanentaddress', 'currentaddress'],
-    },
-    {
-        name: 'Contact Information',
-        fields: ['mobileno', 'emergencymobileno', 'whatsappno'],
-    },
-    {
-        name: 'Bank Details',
-        fields: ['incomedetail', 'bankname', 'accountno', 'ifsccode'],
-    },
-    {
-        name: 'Identity Documents',
-        fields: ['aadharno', 'panno', 'licenseno'],
-    },
-    {
-        name: 'Other',
-        fields: ['salesmanid', 'createdat', 'updatedat'],
-    },
+    { name: 'Personal Information', fields: ['fullname', 'fathername', 'mothername', 'dob', 'age', 'married'] },
+    { name: 'Address Details', fields: ['permanentaddress', 'currentaddress'] },
+    { name: 'Contact Information', fields: ['mobileno', 'emergencymobileno', 'whatsappno'] },
+    { name: 'Identity Documents', fields: ['aadharno', 'panno', 'licenseno'] },
+    { name: 'Other', fields: ['salesmanid', 'createdat', 'updatedat'] },
 ];
+
+// Helper functions
+const calculateAge = (dob) => {
+    if (!dob) return '';
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age;
+};
+
+const formatPhoneNumber = (value) => {
+    if (!value) return '';
+    // Remove all non-digits
+    let digits = value.replace(/\D/g, '');
+    // Remove 91 if it's at the start
+    digits = digits.replace(/^91/, '');
+    // Limit to 10 digits
+    digits = digits.slice(0, 10);
+    // Always show +91 prefix
+    return digits ? `+91 ${digits}` : '+91 ';
+};
+
+const validateAadhar = (value) => {
+    if (!value) return ''; // Not compulsory
+    const digits = value.replace(/\D/g, '');
+    if (digits.length > 0 && digits.length !== 12) {
+        return 'Aadhar must be 12 digits';
+    }
+    return '';
+};
 
 export default function SalesmanDetails({ cacheKey }) {
     const cachedData = cacheKey ? getCache(cacheKey) : null;
@@ -68,29 +80,21 @@ export default function SalesmanDetails({ cacheKey }) {
     const [formData, setFormData] = useState({});
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [formErrors, setFormErrors] = useState({});
 
-    // Image states
     const [imageFiles, setImageFiles] = useState({
-        photo: null,
-        idproof: null,
-        salesmansignature: null,
-        ownersignature: null
+        photo: null, idproof: null, salesmansignature: null, ownersignature: null
     });
     const [imagePreviews, setImagePreviews] = useState({
-        photo: null,
-        idproof: null,
-        salesmansignature: null,
-        ownersignature: null
+        photo: null, idproof: null, salesmansignature: null, ownersignature: null
     });
 
-    // Toast & confirmation popup states
     const [toastMessage, setToastMessage] = useState('');
     const [toastVisible, setToastVisible] = useState(false);
     const [confirmVisible, setConfirmVisible] = useState(false);
     const [confirmMessage, setConfirmMessage] = useState('');
     const [confirmAction, setConfirmAction] = useState(null);
 
-    // Auto-dismiss toast after 5s
     useEffect(() => {
         if (!toastVisible) return;
         const timer = setTimeout(() => setToastVisible(false), 5000);
@@ -108,7 +112,6 @@ export default function SalesmanDetails({ cacheKey }) {
         setConfirmVisible(true);
     }, []);
 
-    // Fetch all salesmen
     const fetchSalesmen = useCallback(async () => {
         setLoading(true);
         try {
@@ -129,37 +132,21 @@ export default function SalesmanDetails({ cacheKey }) {
         }
     }, [fetchSalesmen, cachedData]);
 
-    // Save state to cache before unmounting
     useEffect(() => {
         return () => {
-            if (cacheKey) {
-                saveCache(cacheKey, { salesmen });
-            }
+            if (cacheKey) saveCache(cacheKey, { salesmen });
         };
     }, [cacheKey, salesmen]);
 
-    // Handle Add button click
     const handleAddClick = useCallback(() => {
         setFormData({
-            fullname: '',
-            fathername: '',
-            mothername: '',
-            dob: '',
-            age: '',
-            married: 'No',
-            permanentaddress: '',
-            currentaddress: '',
-            mobileno: '',
-            emergencymobileno: '',
-            whatsappno: '',
-            incomedetail: '',
-            bankname: '',
-            accountno: '',
-            ifsccode: '',
-            aadharno: '',
-            panno: '',
-            licenseno: ''
+            fullname: '', fathername: '', mothername: '', dob: '', age: '',
+            married: 'No', permanentaddress: '', currentaddress: '',
+            mobileno: '', emergencymobileno: '', whatsappno: '',
+            bankname: '', accountno: '', ifsccode: '',
+            aadharno: '', panno: '', licenseno: ''
         });
+        setFormErrors({});
         setImageFiles({ photo: null, idproof: null, salesmansignature: null, ownersignature: null });
         setImagePreviews({ photo: null, idproof: null, salesmansignature: null, ownersignature: null });
         setIsAddMode(true);
@@ -168,35 +155,79 @@ export default function SalesmanDetails({ cacheKey }) {
         setIsModalOpen(true);
     }, []);
 
-    // Handle card click (view details)
     const handleCardClick = useCallback((salesman) => {
         setSelectedSalesman(salesman);
-        setFormData(salesman);
+        setFormData({
+            ...salesman,
+            // Ensure phone numbers always have +91 when displayed
+            mobileno: salesman.mobileno ? (salesman.mobileno.startsWith('+91') ? salesman.mobileno : `+91 ${salesman.mobileno}`) : '',
+            emergencymobileno: salesman.emergencymobileno ? (salesman.emergencymobileno.startsWith('+91') ? salesman.emergencymobileno : `+91 ${salesman.emergencymobileno}`) : '',
+            whatsappno: salesman.whatsappno ? (salesman.whatsappno.startsWith('+91') ? salesman.whatsappno : `+91 ${salesman.whatsappno}`) : '',
+        });
+        setFormErrors({});
         setImageFiles({ photo: null, idproof: null, salesmansignature: null, ownersignature: null });
         setImagePreviews({
-            photo: salesman.photo ? `${salesman.photo}` : null,
-            idproof: salesman.idproof ? `${salesman.idproof}` : null,
-            salesmansignature: salesman.salesmansignature ? `${salesman.salesmansignature}` : null,
-            ownersignature: salesman.ownersignature ? `${salesman.ownersignature}` : null
+            photo: salesman.photo || null,
+            idproof: salesman.idproof || null,
+            salesmansignature: salesman.salesmansignature || null,
+            ownersignature: salesman.ownersignature || null
         });
         setIsEditMode(false);
         setIsAddMode(false);
         setIsModalOpen(true);
     }, []);
 
-    // Handle edit button click inside modal
     const handleEdit = useCallback(() => {
         setIsEditMode(true);
         setIsAddMode(false);
     }, []);
 
-    // Handle form input change
     const handleInputChange = useCallback((e) => {
         const { name, value } = e.target;
+
+        // Auto-calculate age when DOB changes
+        if (name === 'dob') {
+            const age = calculateAge(value);
+            setFormData(prev => ({ ...prev, dob: value, age: age }));
+            return;
+        }
+
+        // Format phone numbers with +91
+        if (name === 'mobileno' || name === 'emergencymobileno' || name === 'whatsappno') {
+            const formatted = formatPhoneNumber(value);
+            setFormData(prev => ({ ...prev, [name]: formatted }));
+            // Clear error for this field
+            setFormErrors(prev => ({ ...prev, [name]: '' }));
+            return;
+        }
+
+        // Aadhar validation
+        if (name === 'aadharno') {
+            const digits = value.replace(/\D/g, '').slice(0, 12);
+            setFormData(prev => ({ ...prev, [name]: digits }));
+            setFormErrors(prev => ({ ...prev, aadharno: validateAadhar(digits) }));
+            return;
+        }
+
         setFormData(prev => ({ ...prev, [name]: value }));
     }, []);
 
-    // Handle image selection
+    const validateForm = useCallback(() => {
+        const errors = {};
+        const phone = formData.mobileno?.replace(/\D/g, '').replace(/^91/, '') || '';
+        const emergency = formData.emergencymobileno?.replace(/\D/g, '').replace(/^91/, '') || '';
+        const whatsapp = formData.whatsappno?.replace(/\D/g, '').replace(/^91/, '') || '';
+        const aadhar = formData.aadharno?.replace(/\D/g, '') || '';
+
+        if (phone && phone.length !== 10) errors.mobileno = 'Mobile must be 10 digits';
+        if (emergency && emergency.length !== 10) errors.emergencymobileno = 'Emergency mobile must be 10 digits';
+        if (whatsapp && whatsapp.length !== 10) errors.whatsappno = 'WhatsApp must be 10 digits';
+        if (aadhar && aadhar.length !== 12) errors.aadharno = 'Aadhar must be 12 digits';
+
+        setFormErrors(errors);
+        return Object.keys(errors).length === 0;
+    }, [formData]);
+
     const handleImageChange = useCallback((e, fieldName) => {
         const file = e.target.files[0];
         if (file) {
@@ -209,14 +240,14 @@ export default function SalesmanDetails({ cacheKey }) {
         }
     }, []);
 
-    // Handle remove image
     const handleRemoveImage = useCallback((fieldName) => {
         setImageFiles(prev => ({ ...prev, [fieldName]: null }));
         setImagePreviews(prev => ({ ...prev, [fieldName]: null }));
     }, []);
 
-    // Save (add or update)
     const handleSave = useCallback(async () => {
+        if (!validateForm()) return;
+
         try {
             setSaving(true);
             const formDataWithImages = new FormData();
@@ -234,6 +265,7 @@ export default function SalesmanDetails({ cacheKey }) {
             if (isAddMode) {
                 result = await postData('employee/insert-salesman', formDataWithImages);
                 if (result?.status) {
+                    clearCache(cacheKey);
                     showToast('Salesman added successfully!');
                     setIsModalOpen(false);
                     fetchSalesmen();
@@ -243,6 +275,7 @@ export default function SalesmanDetails({ cacheKey }) {
             } else {
                 result = await postData('employee/update-salesman', formDataWithImages);
                 if (result?.status) {
+                    clearCache(cacheKey);
                     showToast('Salesman updated successfully!');
                     setIsEditMode(false);
                     fetchSalesmen();
@@ -250,12 +283,17 @@ export default function SalesmanDetails({ cacheKey }) {
                     if (updated?.status) {
                         const updatedData = updated.data[0];
                         setSelectedSalesman(updatedData);
-                        setFormData(updatedData);
+                        setFormData({
+                            ...updatedData,
+                            mobileno: updatedData.mobileno ? updatedData.mobileno.replace(/^\+91\s?/, '') : '',
+                            emergencymobileno: updatedData.emergencymobileno ? updatedData.emergencymobileno.replace(/^\+91\s?/, '') : '',
+                            whatsappno: updatedData.whatsappno ? updatedData.whatsappno.replace(/^\+91\s?/, '') : '',
+                        });
                         setImagePreviews({
-                            photo: updatedData.photo ? `${updatedData.photo}` : null,
-                            idproof: updatedData.idproof ? `${updatedData.idproof}` : null,
-                            salesmansignature: updatedData.salesmansignature ? `${updatedData.salesmansignature}` : null,
-                            ownersignature: updatedData.ownersignature ? `${updatedData.ownersignature}` : null
+                            photo: updatedData.photo || null,
+                            idproof: updatedData.idproof || null,
+                            salesmansignature: updatedData.salesmansignature || null,
+                            ownersignature: updatedData.ownersignature || null
                         });
                     }
                 } else {
@@ -268,14 +306,14 @@ export default function SalesmanDetails({ cacheKey }) {
         } finally {
             setSaving(false);
         }
-    }, [formData, imageFiles, isAddMode, showToast, fetchSalesmen]);
+    }, [formData, imageFiles, isAddMode, cacheKey, showToast, fetchSalesmen, validateForm]);
 
-    // Delete – show confirmation popup then execute
     const performDelete = useCallback(async () => {
         try {
             setDeleting(true);
             const result = await postData('employee/delete-salesman', { salesmanid: selectedSalesman.salesmanid });
             if (result?.status) {
+                clearCache(cacheKey);
                 showToast('Salesman deleted successfully!');
                 setIsModalOpen(false);
                 fetchSalesmen();
@@ -288,21 +326,26 @@ export default function SalesmanDetails({ cacheKey }) {
         } finally {
             setDeleting(false);
         }
-    }, [selectedSalesman, showToast, fetchSalesmen]);
+    }, [selectedSalesman, cacheKey, showToast, fetchSalesmen]);
 
     const handleDelete = useCallback(() => {
         showConfirm('Are you sure you want to delete this salesman?', performDelete);
     }, [showConfirm, performDelete]);
 
-    // Cancel edit (reset to original)
     const handleCancelEdit = useCallback(() => {
         setIsEditMode(false);
-        setFormData(selectedSalesman);
+        setFormData({
+            ...selectedSalesman,
+            mobileno: selectedSalesman.mobileno ? (selectedSalesman.mobileno.startsWith('+91') ? selectedSalesman.mobileno : `+91 ${selectedSalesman.mobileno}`) : '',
+            emergencymobileno: selectedSalesman.emergencymobileno ? (selectedSalesman.emergencymobileno.startsWith('+91') ? selectedSalesman.emergencymobileno : `+91 ${selectedSalesman.emergencymobileno}`) : '',
+            whatsappno: selectedSalesman.whatsappno ? (selectedSalesman.whatsappno.startsWith('+91') ? selectedSalesman.whatsappno : `+91 ${selectedSalesman.whatsappno}`) : '',
+        });
+        setFormErrors({});
         setImagePreviews({
-            photo: selectedSalesman.photo ? `${selectedSalesman.photo}` : null,
-            idproof: selectedSalesman.idproof ? `${selectedSalesman.idproof}` : null,
-            salesmansignature: selectedSalesman.salesmansignature ? `${selectedSalesman.salesmansignature}` : null,
-            ownersignature: selectedSalesman.ownersignature ? `${selectedSalesman.ownersignature}` : null
+            photo: selectedSalesman.photo || null,
+            idproof: selectedSalesman.idproof || null,
+            salesmansignature: selectedSalesman.salesmansignature || null,
+            ownersignature: selectedSalesman.ownersignature || null
         });
     }, [selectedSalesman]);
 
@@ -314,7 +357,6 @@ export default function SalesmanDetails({ cacheKey }) {
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
                 <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-                    {/* Modal Header */}
                     <div className={`px-6 py-4 flex justify-between items-center flex-shrink-0 ${isAddMode ? 'bg-gradient-to-r from-emerald-600 to-emerald-700' : 'bg-gradient-to-r from-blue-600 to-blue-700'}`}>
                         <div className="flex items-center gap-3">
                             <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-white text-xl font-bold">
@@ -327,17 +369,13 @@ export default function SalesmanDetails({ cacheKey }) {
                                 {!isAddMode && <p className="text-sm text-blue-100">{selectedSalesman?.fullname}</p>}
                             </div>
                         </div>
-                        <button
-                            onClick={() => setIsModalOpen(false)}
-                            className="text-white hover:text-gray-200 transition-colors cursor-pointer"
-                        >
+                        <button onClick={() => setIsModalOpen(false)} className="text-white hover:text-gray-200 transition-colors cursor-pointer">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
                     </div>
 
-                    {/* Modal Body */}
                     <div className="overflow-y-auto p-6 flex-1" style={{ maxHeight: 'calc(90vh - 180px)' }}>
                         {CATEGORIES.map(category => {
                             const categoryFields = FIELDS.filter(f => category.fields.includes(f.key) && (!isAddMode || f.addMode));
@@ -352,6 +390,7 @@ export default function SalesmanDetails({ cacheKey }) {
                                         {categoryFields.map(field => {
                                             const value = formData[field.key] || '';
                                             const isFieldEditable = isEditable && field.editable;
+                                            const error = formErrors[field.key];
 
                                             return (
                                                 <div key={field.key} className="space-y-1">
@@ -359,27 +398,36 @@ export default function SalesmanDetails({ cacheKey }) {
                                                         {field.label}
                                                     </label>
                                                     {isFieldEditable ? (
-                                                        field.type === 'select' ? (
-                                                            <select
-                                                                name={field.key}
-                                                                value={value}
-                                                                onChange={handleInputChange}
-                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm cursor-pointer"
-                                                            >
-                                                                <option value="">Select</option>
-                                                                {field.options.map(opt => (
-                                                                    <option key={opt} value={opt}>{opt}</option>
-                                                                ))}
-                                                            </select>
-                                                        ) : (
-                                                            <input
-                                                                type={field.type || 'text'}
-                                                                name={field.key}
-                                                                value={value}
-                                                                onChange={handleInputChange}
-                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                                            />
-                                                        )
+                                                        <div>
+                                                            {field.type === 'select' ? (
+                                                                <select
+                                                                    name={field.key}
+                                                                    value={value}
+                                                                    onChange={handleInputChange}
+                                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm cursor-pointer"
+                                                                >
+                                                                    <option value="">Select</option>
+                                                                    {field.options.map(opt => (
+                                                                        <option key={opt} value={opt}>{opt}</option>
+                                                                    ))}
+                                                                </select>
+                                                            ) : (
+                                                                <input
+                                                                    type={field.type || 'text'}
+                                                                    name={field.key}
+                                                                    value={value}
+                                                                    onChange={handleInputChange}
+                                                                    readOnly={field.key === 'age'}
+                                                                    maxLength={
+                                                                        field.key === 'aadharno' ? 12 :
+                                                                            field.key === 'mobileno' || field.key === 'emergencymobileno' || field.key === 'whatsappno' ? 15 :
+                                                                                undefined
+                                                                    }
+                                                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm ${field.key === 'age' ? 'bg-gray-100 cursor-not-allowed' : 'border-gray-300'} ${error ? 'border-red-500' : ''}`}
+                                                                />
+                                                            )}
+                                                            {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+                                                        </div>
                                                     ) : (
                                                         <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
                                                             {value || '-'}
@@ -396,226 +444,85 @@ export default function SalesmanDetails({ cacheKey }) {
                         {/* Image Upload / View */}
                         {(isAddMode || isEditMode) && (
                             <div className="mb-6">
-                                <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2 mb-3">
-                                    Picture Upload
-                                </h4>
+                                <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2 mb-3">Picture Upload</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                    {/* Photo Upload */}
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Photo</label>
-                                        {imagePreviews.photo ? (
-                                            <div className="relative">
-                                                <img src={imagePreviews.photo} alt="Photo" className="w-full h-32 object-cover rounded-lg border border-gray-200" />
-                                                <button
-                                                    onClick={() => handleRemoveImage('photo')}
-                                                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 cursor-pointer"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
-                                                <input
-                                                    type="file" accept="image/*"
-                                                    onChange={(e) => handleImageChange(e, 'photo')}
-                                                    className="hidden" id="photo-upload"
-                                                />
-                                                <label htmlFor="photo-upload" className="cursor-pointer">
-                                                    <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                    </svg>
-                                                    <p className="text-sm text-gray-500 mt-1">Click to upload</p>
-                                                </label>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* ID Proof */}
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">ID Proof</label>
-                                        {imagePreviews.idproof ? (
-                                            <div className="relative">
-                                                <img src={imagePreviews.idproof} alt="ID Proof" className="w-full h-32 object-cover rounded-lg border border-gray-200" />
-                                                <button
-                                                    onClick={() => handleRemoveImage('idproof')}
-                                                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 cursor-pointer"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
-                                                <input
-                                                    type="file" accept="image/*"
-                                                    onChange={(e) => handleImageChange(e, 'idproof')}
-                                                    className="hidden" id="idproof-upload"
-                                                />
-                                                <label htmlFor="idproof-upload" className="cursor-pointer">
-                                                    <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                    </svg>
-                                                    <p className="text-sm text-gray-500 mt-1">Click to upload</p>
-                                                </label>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Salesman Signature */}
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman Signature</label>
-                                        {imagePreviews.salesmansignature ? (
-                                            <div className="relative">
-                                                <img src={imagePreviews.salesmansignature} alt="Signature" className="w-full h-32 object-cover rounded-lg border border-gray-200" />
-                                                <button
-                                                    onClick={() => handleRemoveImage('salesmansignature')}
-                                                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 cursor-pointer"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
-                                                <input
-                                                    type="file" accept="image/*"
-                                                    onChange={(e) => handleImageChange(e, 'salesmansignature')}
-                                                    className="hidden" id="signature-upload"
-                                                />
-                                                <label htmlFor="signature-upload" className="cursor-pointer">
-                                                    <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                                    </svg>
-                                                    <p className="text-sm text-gray-500 mt-1">Click to upload</p>
-                                                </label>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Owner Signature */}
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Owner Signature</label>
-                                        {imagePreviews.ownersignature ? (
-                                            <div className="relative">
-                                                <img src={imagePreviews.ownersignature} alt="Owner Signature" className="w-full h-32 object-cover rounded-lg border border-gray-200" />
-                                                <button
-                                                    onClick={() => handleRemoveImage('ownersignature')}
-                                                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 cursor-pointer"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
-                                                <input
-                                                    type="file" accept="image/*"
-                                                    onChange={(e) => handleImageChange(e, 'ownersignature')}
-                                                    className="hidden" id="owner-signature-upload"
-                                                />
-                                                <label htmlFor="owner-signature-upload" className="cursor-pointer">
-                                                    <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                                    </svg>
-                                                    <p className="text-sm text-gray-500 mt-1">Click to upload</p>
-                                                </label>
-                                            </div>
-                                        )}
-                                    </div>
+                                    {['photo', 'idproof', 'salesmansignature', 'ownersignature'].map((field) => (
+                                        <div key={field} className="space-y-2">
+                                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                {field === 'photo' ? 'Photo' : field === 'idproof' ? 'ID Proof' : field === 'salesmansignature' ? 'Salesman Signature' : 'Owner Signature'}
+                                            </label>
+                                            {imagePreviews[field] ? (
+                                                <div className="relative">
+                                                    <img src={imagePreviews[field]} alt={field} className="w-full h-32 object-cover rounded-lg border border-gray-200" />
+                                                    <button onClick={() => handleRemoveImage(field)} className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 cursor-pointer">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
+                                                    <input type="file" accept="image/*" onChange={(e) => handleImageChange(e, field)} className="hidden" id={`${field}-upload`} />
+                                                    <label htmlFor={`${field}-upload`} className="cursor-pointer">
+                                                        <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                        </svg>
+                                                        <p className="text-sm text-gray-500 mt-1">Click to upload</p>
+                                                    </label>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
 
-                        {/* View Mode - Existing Images as Links */}
+                        {/* View Mode */}
                         {!isAddMode && !isEditMode && selectedSalesman && (
                             <div className="mb-6">
-                                <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2 mb-3">
-                                    Uploaded Images
-                                </h4>
+                                <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2 mb-3">Uploaded Images</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                    {selectedSalesman.photo && (
-                                        <div className="space-y-1">
-                                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Photo</label>
-                                            <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
-                                                <a href={`${selectedSalesman.photo}`} target="_blank" className="text-blue-600 hover:underline cursor-pointer">
-                                                    View Photo
-                                                </a>
+                                    {['photo', 'idproof', 'salesmansignature', 'ownersignature'].map((field) => (
+                                        selectedSalesman[field] && (
+                                            <div key={field} className="space-y-1">
+                                                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                    {field === 'photo' ? 'Photo' : field === 'idproof' ? 'ID Proof' : field === 'salesmansignature' ? 'Salesman Signature' : 'Owner Signature'}
+                                                </label>
+                                                <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
+                                                    <a href={selectedSalesman[field]} target="_blank" className="text-blue-600 hover:underline cursor-pointer">View</a>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
-                                    {selectedSalesman.idproof && (
-                                        <div className="space-y-1">
-                                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">ID Proof</label>
-                                            <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
-                                                <a href={`${selectedSalesman.idproof}`} target="_blank" className="text-blue-600 hover:underline cursor-pointer">
-                                                    View ID Proof
-                                                </a>
-                                            </div>
-                                        </div>
-                                    )}
-                                    {selectedSalesman.salesmansignature && (
-                                        <div className="space-y-1">
-                                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman Signature</label>
-                                            <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
-                                                <a href={`${selectedSalesman.salesmansignature}`} target="_blank" className="text-blue-600 hover:underline cursor-pointer">
-                                                    View Signature
-                                                </a>
-                                            </div>
-                                        </div>
-                                    )}
-                                    {selectedSalesman.ownersignature && (
-                                        <div className="space-y-1">
-                                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Owner Signature</label>
-                                            <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-900">
-                                                <a href={`${selectedSalesman.ownersignature}`} target="_blank" className="text-blue-600 hover:underline cursor-pointer">
-                                                    View Signature
-                                                </a>
-                                            </div>
-                                        </div>
-                                    )}
+                                        )
+                                    ))}
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    {/* Modal Footer */}
                     <div className="border-t-2 border-gray-200 px-6 py-5 flex justify-end gap-3 items-center bg-gray-50 flex-shrink-0">
                         {isAddMode ? (
                             <>
                                 <button onClick={handleSave} disabled={saving} className={`px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer ${saving ? 'opacity-60 cursor-not-allowed' : ''}`}>
                                     {saving ? 'Saving...' : 'Add Salesman'}
                                 </button>
-                                <button onClick={() => setIsModalOpen(false)} disabled={saving} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer">
-                                    Cancel
-                                </button>
+                                <button onClick={() => setIsModalOpen(false)} disabled={saving} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer">Cancel</button>
                             </>
                         ) : (
                             <>
                                 {!isEditMode ? (
                                     <>
-                                        <button onClick={handleEdit} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer">
-                                            Edit
-                                        </button>
+                                        <button onClick={handleEdit} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer">Edit</button>
                                         <button onClick={handleDelete} disabled={deleting} className={`px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors cursor-pointer ${deleting ? 'opacity-60 cursor-not-allowed' : ''}`}>
                                             {deleting ? 'Deleting...' : 'Delete'}
                                         </button>
-                                        <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer">
-                                            Close
-                                        </button>
+                                        <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer">Close</button>
                                     </>
                                 ) : (
                                     <>
                                         <button onClick={handleSave} disabled={saving} className={`px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors cursor-pointer ${saving ? 'opacity-60 cursor-not-allowed' : ''}`}>
                                             {saving ? 'Saving...' : 'Save Changes'}
                                         </button>
-                                        <button onClick={handleCancelEdit} disabled={saving} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer">
-                                            Cancel
-                                        </button>
+                                        <button onClick={handleCancelEdit} disabled={saving} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer">Cancel</button>
                                     </>
                                 )}
                             </>
@@ -624,9 +531,8 @@ export default function SalesmanDetails({ cacheKey }) {
                 </div>
             </div>
         );
-    }, [isModalOpen, isAddMode, isEditMode, selectedSalesman, formData, imagePreviews, saving, deleting, handleInputChange, handleImageChange, handleRemoveImage, handleSave, handleEdit, handleDelete, handleCancelEdit]);
+    }, [isModalOpen, isAddMode, isEditMode, selectedSalesman, formData, formErrors, imagePreviews, saving, deleting, handleInputChange, handleImageChange, handleRemoveImage, handleSave, handleEdit, handleDelete, handleCancelEdit]);
 
-    // Render salesman cards
     const renderSalesmanCards = useCallback(() => {
         if (loading) {
             return (
@@ -635,7 +541,6 @@ export default function SalesmanDetails({ cacheKey }) {
                 </div>
             );
         }
-
         if (salesmen.length === 0) {
             return (
                 <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
@@ -643,33 +548,22 @@ export default function SalesmanDetails({ cacheKey }) {
                 </div>
             );
         }
-
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
                 {salesmen.map(salesman => (
-                    <div
-                        key={salesman.salesmanid}
-                        onClick={() => handleCardClick(salesman)}
-                        className="bg-white rounded-lg shadow-sm border border-gray-200 p-2 hover:shadow-md transition-all cursor-pointer hover:border-blue-400"
-                    >
+                    <div key={salesman.salesmanid} onClick={() => handleCardClick(salesman)} className="bg-white rounded-lg shadow-sm border border-gray-200 p-2 hover:shadow-md transition-all cursor-pointer hover:border-blue-400">
                         <div className="flex flex-col items-center">
                             <div className="w-30 h-30 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-3xl font-bold mb-3 overflow-hidden">
                                 {salesman.photo ? (
-                                    <img src={salesman.photo} alt={salesman.fullname} className="w-full h-full object-cover"
-                                        onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'; }}
-                                    />
+                                    <img src={salesman.photo} alt={salesman.fullname} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'; }} />
                                 ) : salesman.idproof ? (
-                                    <img src={`${salesman.idproof}`} alt={salesman.fullname} className="w-full h-full object-cover"
-                                        onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'; }}
-                                    />
+                                    <img src={salesman.idproof} alt={salesman.fullname} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'; }} />
                                 ) : (
                                     salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'
                                 )}
                             </div>
                             <div className="mt-2 flex items-center gap-2">
-                                <span className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-full">
-                                    ID: {salesman.salesmanid}
-                                </span>
+                                <span className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-full">ID: {salesman.salesmanid}</span>
                             </div>
                             <h3 className="text-lg font-semibold text-gray-900 text-center">{salesman.fullname || 'N/A'}</h3>
                         </div>
@@ -681,32 +575,24 @@ export default function SalesmanDetails({ cacheKey }) {
 
     return (
         <div>
-            {/* Toast Notification */}
             {toastVisible && (
                 <div className="fixed top-4 right-4 z-50 bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
                     <span>{toastMessage}</span>
                     <button onClick={() => setToastVisible(false)} className="text-white hover:text-gray-200 font-bold text-lg leading-none cursor-pointer">×</button>
                 </div>
             )}
-
-            {/* Confirmation Popup - HIGHER z-index than modal */}
             {confirmVisible && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
                     <div className="bg-white rounded-xl shadow-2xl p-6 w-96 max-w-[90%]">
                         <h3 className="text-lg font-semibold text-gray-900 mb-4">Confirm Action</h3>
                         <p className="text-sm text-gray-600 mb-6">{confirmMessage}</p>
                         <div className="flex justify-end gap-3">
-                            <button onClick={() => setConfirmVisible(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors text-sm font-medium cursor-pointer">
-                                Cancel
-                            </button>
-                            <button onClick={() => { if (confirmAction) confirmAction(); setConfirmVisible(false); }} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer">
-                                Confirm
-                            </button>
+                            <button onClick={() => setConfirmVisible(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors text-sm font-medium cursor-pointer">Cancel</button>
+                            <button onClick={() => { if (confirmAction) confirmAction(); setConfirmVisible(false); }} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer">Confirm</button>
                         </div>
                     </div>
                 </div>
             )}
-
             <div className="mb-8 flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-semibold text-gray-900">Salesman Details</h2>

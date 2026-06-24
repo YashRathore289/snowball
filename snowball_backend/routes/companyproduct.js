@@ -1,10 +1,8 @@
-// companyProductRoutes.js
 const express = require('express');
 const router = express.Router();
 const pool = require('./pool');
 const rateLimiter = require('./rateLimiter');
 
-// Global rate limit: 100 requests per 15 minutes per IP
 router.use(rateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -16,29 +14,29 @@ router.post("/retrieve-company-products", (req, res) => {
   try {
     const query = `SELECT 
       companyproductid,
-      icecreamname,
       entry_date,
-      type,
-      orderedqty,
-      orderedamount,
-      deliveredqty,
-      deliveredamount,
-      (orderedqty - deliveredqty) AS remainingqty,
+      details,
       DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
       DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') AS updatedat
     FROM company_products 
-    ORDER BY icecreamname`;
+    ORDER BY entry_date DESC`;
 
     pool.query(query, (error, result) => {
       if (error) {
         console.error(error);
         return res.status(500).json({ status: false, message: "Database Error" });
       }
+
+      const parsedResult = result.map(record => ({
+        ...record,
+        details: typeof record.details === 'string' ? JSON.parse(record.details) : record.details
+      }));
+
       return res.status(200).json({
         status: true,
         message: "Success",
-        count: result.length,
-        data: result
+        count: parsedResult.length,
+        data: parsedResult
       });
     });
   } catch (e) {
@@ -47,30 +45,22 @@ router.post("/retrieve-company-products", (req, res) => {
   }
 });
 
-// ==================== 2. INSERT COMPANY PRODUCT ====================
+// ==================== 2. INSERT COMPANY PRODUCT (only details + entry_date) ====================
 router.post("/insert-company-product", (req, res) => {
   try {
-    const { 
-      icecreamname, type, orderedqty, orderedamount, 
-      deliveredqty, deliveredamount, entry_date 
-    } = req.body;
+    const { entry_date, details } = req.body;
 
-    if (!icecreamname || !type) {
-      return res.status(400).json({ status: false, message: "Ice cream name and type are required" });
+    if (!details || (Array.isArray(details) && details.length === 0)) {
+      return res.status(400).json({ status: false, message: "At least one product detail is required" });
     }
 
     const query = `INSERT INTO company_products 
-      (icecreamname, type, orderedqty, orderedamount, deliveredqty, deliveredamount, entry_date, createdat, updatedat) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`;
+      (entry_date, details, createdat, updatedat) 
+      VALUES (?, ?, NOW(), NOW())`;
 
     const values = [
-      icecreamname,
-      type,
-      orderedqty || 0,
-      orderedamount || 0,
-      deliveredqty || 0,
-      deliveredamount || 0,
-      entry_date || new Date().toISOString().split('T')[0]
+      entry_date || new Date().toISOString().split('T')[0],
+      JSON.stringify(details)
     ];
 
     pool.query(query, values, (error, result) => {
@@ -78,17 +68,17 @@ router.post("/insert-company-product", (req, res) => {
         console.error(error);
         return res.status(500).json({ status: false, message: "Database Error" });
       }
-      // Return the inserted ID and data
+
       pool.query(
-        `SELECT companyproductid, icecreamname, type, orderedqty, orderedamount, deliveredqty, deliveredamount,
-        (orderedqty - deliveredqty) AS remainingqty
-        FROM company_products WHERE companyproductid = ?`,
+        `SELECT companyproductid, entry_date, details FROM company_products WHERE companyproductid = ?`,
         [result.insertId],
         (err, rows) => {
           if (err) {
             return res.status(200).json({ status: true, message: "Product added", data: { companyproductid: result.insertId } });
           }
-          return res.status(200).json({ status: true, message: "Product added successfully", data: rows[0] });
+          const data = rows[0];
+          data.details = typeof data.details === 'string' ? JSON.parse(data.details) : data.details;
+          return res.status(200).json({ status: true, message: "Product added successfully", data });
         }
       );
     });
@@ -101,26 +91,17 @@ router.post("/insert-company-product", (req, res) => {
 // ==================== 3. UPDATE COMPANY PRODUCT ====================
 router.post("/update-company-product", (req, res) => {
   try {
-    const { 
-      companyproductid, icecreamname, type, orderedqty, orderedamount,
-      deliveredqty, deliveredamount, entry_date 
-    } = req.body;
+    const { companyproductid, entry_date, details } = req.body;
 
     if (!companyproductid) {
       return res.status(400).json({ status: false, message: "Product ID is required" });
     }
 
-    // Build dynamic SET clause
     let updateFields = [];
     let values = [];
 
-    if (icecreamname !== undefined) { updateFields.push('icecreamname = ?'); values.push(icecreamname); }
-    if (type !== undefined) { updateFields.push('type = ?'); values.push(type); }
-    if (orderedqty !== undefined) { updateFields.push('orderedqty = ?'); values.push(orderedqty); }
-    if (orderedamount !== undefined) { updateFields.push('orderedamount = ?'); values.push(orderedamount); }
-    if (deliveredqty !== undefined) { updateFields.push('deliveredqty = ?'); values.push(deliveredqty); }
-    if (deliveredamount !== undefined) { updateFields.push('deliveredamount = ?'); values.push(deliveredamount); }
     if (entry_date !== undefined) { updateFields.push('entry_date = ?'); values.push(entry_date); }
+    if (details !== undefined) { updateFields.push('details = ?'); values.push(JSON.stringify(details)); }
 
     if (updateFields.length === 0) {
       return res.status(400).json({ status: false, message: "No fields to update" });
@@ -139,17 +120,16 @@ router.post("/update-company-product", (req, res) => {
         return res.status(404).json({ status: false, message: "Product not found" });
       }
 
-      // Fetch updated record
       pool.query(
-        `SELECT companyproductid, icecreamname, type, orderedqty, orderedamount, deliveredqty, deliveredamount,
-        (orderedqty - deliveredqty) AS remainingqty, entry_date
-        FROM company_products WHERE companyproductid = ?`,
+        `SELECT companyproductid, entry_date, details FROM company_products WHERE companyproductid = ?`,
         [companyproductid],
         (err, rows) => {
           if (err) {
             return res.status(200).json({ status: true, message: "Product updated" });
           }
-          return res.status(200).json({ status: true, message: "Product updated successfully", data: rows[0] });
+          const data = rows[0];
+          data.details = typeof data.details === 'string' ? JSON.parse(data.details) : data.details;
+          return res.status(200).json({ status: true, message: "Product updated successfully", data });
         }
       );
     });
@@ -167,9 +147,8 @@ router.post("/delete-company-product", (req, res) => {
       return res.status(400).json({ status: false, message: "Product ID is required" });
     }
 
-    // Fetch before delete
     pool.query(
-      `SELECT companyproductid, icecreamname, type, orderedqty, deliveredqty FROM company_products WHERE companyproductid = ?`,
+      `SELECT companyproductid, entry_date, details FROM company_products WHERE companyproductid = ?`,
       [companyproductid],
       (err, result) => {
         if (err) {
@@ -180,6 +159,7 @@ router.post("/delete-company-product", (req, res) => {
           return res.status(404).json({ status: false, message: "Product not found" });
         }
         const productData = result[0];
+        productData.details = typeof productData.details === 'string' ? JSON.parse(productData.details) : productData.details;
         pool.query("DELETE FROM company_products WHERE companyproductid = ?", [companyproductid], (error) => {
           if (error) {
             console.error(error);
@@ -189,6 +169,84 @@ router.post("/delete-company-product", (req, res) => {
         });
       }
     );
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ status: false, message: "Technical Issue" });
+  }
+});
+
+// ==================== 5. GET UNIQUE MONTHS/YEARS FROM DATA ====================
+router.post("/get-available-months", (req, res) => {
+  try {
+    const query = `SELECT DISTINCT 
+      DATE_FORMAT(entry_date, '%Y-%m') AS month_key,
+      DATE_FORMAT(entry_date, '%M %Y') AS month_label,
+      DATE_FORMAT(entry_date, '%Y') AS year,
+      DATE_FORMAT(entry_date, '%m') AS month
+    FROM company_products 
+    ORDER BY entry_date DESC`;
+
+    pool.query(query, (error, result) => {
+      if (error) {
+        console.error(error);
+        return res.status(500).json({ status: false, message: "Database Error" });
+      }
+      return res.status(200).json({
+        status: true,
+        message: "Success",
+        data: result
+      });
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ status: false, message: "Technical Issue" });
+  }
+});
+
+// ==================== 6. RETRIEVE COMPANY PRODUCTS BY MONTH/YEAR ====================
+router.post("/retrieve-company-products-by-month", (req, res) => {
+  try {
+    const { month, year } = req.body;
+
+    let query = `SELECT 
+      companyproductid,
+      entry_date,
+      details,
+      DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
+      DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') AS updatedat
+    FROM company_products WHERE 1=1`;
+
+    let values = [];
+
+    if (year) {
+      query += ` AND YEAR(entry_date) = ?`;
+      values.push(year);
+    }
+    if (month) {
+      query += ` AND MONTH(entry_date) = ?`;
+      values.push(month);
+    }
+
+    query += ` ORDER BY entry_date DESC`;
+
+    pool.query(query, values, (error, result) => {
+      if (error) {
+        console.error(error);
+        return res.status(500).json({ status: false, message: "Database Error" });
+      }
+
+      const parsedResult = result.map(record => ({
+        ...record,
+        details: typeof record.details === 'string' ? JSON.parse(record.details) : record.details
+      }));
+
+      return res.status(200).json({
+        status: true,
+        message: "Success",
+        count: parsedResult.length,
+        data: parsedResult
+      });
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ status: false, message: "Technical Issue" });

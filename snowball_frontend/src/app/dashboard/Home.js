@@ -4,6 +4,19 @@ import { useEffect, useState } from 'react';
 export default function HomeComponent() {
     const [user, setUser] = useState(null);
     const [showContent, setShowContent] = useState(false);
+    const [particles, setParticles] = useState([]);
+
+    useEffect(() => {
+        // Generate random values only on client side
+        const newParticles = [...Array(5)].map((_, i) => ({
+            id: i,
+            left: `${10 + Math.random() * 80}%`,
+            top: `${10 + Math.random() * 80}%`,
+            animationDelay: `${i * 0.5}s`,
+            animationDuration: `${2 + Math.random() * 3}s`,
+        }));
+        setParticles(newParticles);
+    }, []);
 
     useEffect(() => {
         const storedUser = sessionStorage.getItem("user");
@@ -21,22 +34,22 @@ export default function HomeComponent() {
             <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style={{ animationDuration: '3s' }}></div>
 
             {/* Animated particles */}
-            {[...Array(5)].map((_, i) => (
+            {particles.map((p) => (
                 <div
-                    key={i}
+                    key={p.id}
                     className="absolute w-2 h-2 bg-blue-400 rounded-full opacity-30 animate-bounce"
                     style={{
-                        left: `${10 + Math.random() * 80}%`,
-                        top: `${10 + Math.random() * 80}%`,
-                        animationDelay: `${i * 0.5}s`,
-                        animationDuration: `${2 + Math.random() * 3}s`,
+                        left: p.left,
+                        top: p.top,
+                        animationDelay: p.animationDelay,
+                        animationDuration: p.animationDuration,
                     }}
                 />
             ))}
 
             {/* Main Content */}
             <div className={`relative z-10 flex flex-col items-center transition-all duration-1000 ease-out ${showContent ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-                
+
                 {/* Logo */}
                 <div className="mb-8 p-4"                    >
                     <img style={{ animation: 'float 4s ease-in-out infinite' }} src='snowball.png' className="h-48 md:h-56  transition-all duration-500 transform hover:scale-105" alt="Snowball Logo" />

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react';
 import { postData } from '@/Services';
-import { saveCache, getCache } from './ComponentCache';
+import { saveCache, getCache, clearCache } from './ComponentCache';
 
 export default function BatteryManagement({ cacheKey }) {
   // Restore from cache if available
@@ -115,6 +115,7 @@ export default function BatteryManagement({ cacheKey }) {
           batteryname: formData.batteryname
         });
         if (result?.status) {
+          clearCache(cacheKey);
           showToast('Battery added successfully!');
           setIsModalOpen(false);
           fetchBatteries();
@@ -127,6 +128,7 @@ export default function BatteryManagement({ cacheKey }) {
           batteryname: formData.batteryname
         });
         if (result?.status) {
+          clearCache(cacheKey);
           showToast('Battery updated successfully!');
           setIsModalOpen(false);
           fetchBatteries();
@@ -145,6 +147,7 @@ export default function BatteryManagement({ cacheKey }) {
     try {
       const result = await postData('battery/delete-battery', { batteryid });
       if (result?.status) {
+        clearCache(cacheKey);
         showToast('Battery deleted successfully!');
         fetchBatteries();
       } else {
@@ -247,9 +250,9 @@ export default function BatteryManagement({ cacheKey }) {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">S.No</th>
-                <th className="py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Battery Name</th>
-                <th className="py-3 text-end pr-30 w-[40%] text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="py-3 text-center text-xs font-bold text-black uppercase tracking-wider">S.No</th>
+                <th className="py-3 text-center text-xs font-bold text-black uppercase tracking-wider">Battery Name</th>
+                <th className="py-3 text-end pr-30 w-[40%] text-xs font-bold text-black uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
