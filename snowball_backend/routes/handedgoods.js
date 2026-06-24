@@ -4,15 +4,8 @@ const router = express.Router();
 const pool = require('./pool');
 const rateLimiter = require('./rateLimiter');
 
-// Global rate limit: 100 requests per 15 minutes per IP
-router.use(rateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests, please try again after 15 minutes.'
-}));
-
 // ==================== 1. RETRIEVE HANDED GOODS ====================
-router.post("/retrieve-handed-goods", (req, res) => {
+router.post("/retrieve-handed-goods", rateLimiter.high(), (req, res) => {
   try {
     const { date, month, year } = req.body;
 
@@ -76,7 +69,7 @@ router.post("/retrieve-handed-goods", (req, res) => {
 });
 
 // ==================== 2. INSERT HANDED GOODS ====================
-router.post("/insert-handed-goods", (req, res) => {
+router.post("/insert-handed-goods", rateLimiter.critical(), (req, res) => {
   try {
     const { salesmanid, details, date, returnamt, commission, finalamount, clear_status, submit_amount } = req.body;
 
@@ -138,7 +131,7 @@ router.post("/insert-handed-goods", (req, res) => {
 });
 
 // ==================== 3. UPDATE HANDED GOODS ====================
-router.post("/update-handed-goods", (req, res) => {
+router.post("/update-handed-goods", rateLimiter.critical(), (req, res) => {
   try {
     const { handedgoodsid, salesmanid, details, date, returnamt, commission, finalamount, clear_status, submit_amount } = req.body;
 
@@ -211,7 +204,7 @@ router.post("/update-handed-goods", (req, res) => {
 });
 
 // ==================== 4. DELETE HANDED GOODS ====================
-router.post("/delete-handed-goods", (req, res) => {
+router.post("/delete-handed-goods", rateLimiter.critical(), (req, res) => {
   try {
     const { handedgoodsid } = req.body;
     if (!handedgoodsid) {
@@ -250,7 +243,7 @@ router.post("/delete-handed-goods", (req, res) => {
 });
 
 // ==================== 5. MONTHLY SALES REPORT ====================
-router.post("/monthly-sales-report", (req, res) => {
+router.post("/monthly-sales-report", rateLimiter.low(), (req, res) => {
   try {
     const { month, year } = req.body;
     const searchMonth = month || new Date().getMonth() + 1;
@@ -326,14 +319,8 @@ router.post("/monthly-sales-report", (req, res) => {
   }
 });
 
-router.use(rateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests, please try again after 15 minutes.'
-}));
-
 // ==================== ACCOUNT SUMMARY ====================
-router.post("/retrieve-account-summary", (req, res) => {
+router.post("/retrieve-account-summary", rateLimiter.high(), (req, res) => {
   try {
     const query = `
       SELECT 
@@ -416,7 +403,7 @@ router.post("/retrieve-account-summary", (req, res) => {
 });
 
 // ==================== 2. RETRIEVE SALESMAN ENTRIES ====================
-router.post("/retrieve-salesman-entries", (req, res) => {
+router.post("/retrieve-salesman-entries", rateLimiter.high(), (req, res) => {
   try {
     const { salesmanid, from_date, to_date } = req.body;
 
@@ -491,7 +478,7 @@ router.post("/retrieve-salesman-entries", (req, res) => {
 });
 
 // ==================== SAVE SETTLEMENT ====================
-router.post("/save-settlement", (req, res) => {
+router.post("/save-settlement", rateLimiter.critical(), (req, res) => {
   try {
     const {
       salesmanid,

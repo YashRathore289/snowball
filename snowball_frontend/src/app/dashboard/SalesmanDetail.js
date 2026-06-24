@@ -49,18 +49,14 @@ const calculateAge = (dob) => {
 
 const formatPhoneNumber = (value) => {
     if (!value) return '';
-    // Remove all non-digits
     let digits = value.replace(/\D/g, '');
-    // Remove 91 if it's at the start
     digits = digits.replace(/^91/, '');
-    // Limit to 10 digits
     digits = digits.slice(0, 10);
-    // Always show +91 prefix
     return digits ? `+91 ${digits}` : '+91 ';
 };
 
 const validateAadhar = (value) => {
-    if (!value) return ''; // Not compulsory
+    if (!value) return '';
     const digits = value.replace(/\D/g, '');
     if (digits.length > 0 && digits.length !== 12) {
         return 'Aadhar must be 12 digits';

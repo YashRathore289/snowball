@@ -39,10 +39,10 @@ export default function TotalSales({ cacheKey }) {
   }, [selectedMonth, selectedYear]);
 
   useEffect(() => {
-    if (!cachedData) {
+    if (!cachedData || !reportData) {
       fetchReport();
     }
-  }, [fetchReport, cachedData]);
+  }, []);
 
   // Save state to cache before unmounting
   useEffect(() => {

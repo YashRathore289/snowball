@@ -3,14 +3,8 @@ const router = express.Router();
 const pool = require('./pool');
 const rateLimiter = require('./rateLimiter');
 
-router.use(rateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests, please try again after 15 minutes.'
-}));
-
 // ==================== 1. RETRIEVE ALL COMPANY PRODUCTS ====================
-router.post("/retrieve-company-products", (req, res) => {
+router.post("/retrieve-company-products", rateLimiter.high(), (req, res) => {
   try {
     const query = `SELECT 
       companyproductid,
@@ -46,7 +40,7 @@ router.post("/retrieve-company-products", (req, res) => {
 });
 
 // ==================== 2. INSERT COMPANY PRODUCT (only details + entry_date) ====================
-router.post("/insert-company-product", (req, res) => {
+router.post("/insert-company-product", rateLimiter.critical(), (req, res) => {
   try {
     const { entry_date, details } = req.body;
 
@@ -89,7 +83,7 @@ router.post("/insert-company-product", (req, res) => {
 });
 
 // ==================== 3. UPDATE COMPANY PRODUCT ====================
-router.post("/update-company-product", (req, res) => {
+router.post("/update-company-product", rateLimiter.critical(), (req, res) => {
   try {
     const { companyproductid, entry_date, details } = req.body;
 
@@ -140,7 +134,7 @@ router.post("/update-company-product", (req, res) => {
 });
 
 // ==================== 4. DELETE COMPANY PRODUCT ====================
-router.post("/delete-company-product", (req, res) => {
+router.post("/delete-company-product", rateLimiter.critical(), (req, res) => {
   try {
     const { companyproductid } = req.body;
     if (!companyproductid) {
@@ -176,7 +170,7 @@ router.post("/delete-company-product", (req, res) => {
 });
 
 // ==================== 5. GET UNIQUE MONTHS/YEARS FROM DATA ====================
-router.post("/get-available-months", (req, res) => {
+router.post("/get-available-months", rateLimiter.low(), (req, res) => {
   try {
     const query = `SELECT DISTINCT 
       DATE_FORMAT(entry_date, '%Y-%m') AS month_key,
@@ -204,7 +198,7 @@ router.post("/get-available-months", (req, res) => {
 });
 
 // ==================== 6. RETRIEVE COMPANY PRODUCTS BY MONTH/YEAR ====================
-router.post("/retrieve-company-products-by-month", (req, res) => {
+router.post("/retrieve-company-products-by-month", rateLimiter.low(), (req, res) => {
   try {
     const { month, year } = req.body;
 

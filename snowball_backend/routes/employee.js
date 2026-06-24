@@ -3,17 +3,10 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./pool');
 const upload = require('./multer');
-const rateLimiter = require('./rateLimiter');   // import the rate limiter
-
-// Global rate limit for all employee routes: 100 requests per 15 minutes per IP
-router.use(rateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests, please try again after 15 minutes.'
-}));
+const rateLimiter = require('./rateLimiter');
 
 // ==================== LOGIN ====================
-router.post("/login", (req, res) => {
+router.post("/login", rateLimiter.high(), (req, res) => {
   try {
     pool.query(
       "SELECT * FROM admins WHERE (username = ? OR email = ? OR phone = ?) AND password = ?",
@@ -36,7 +29,7 @@ router.post("/login", (req, res) => {
 });
 
 // ==================== RETRIEVE SALESMAN ====================
-router.post("/retrieve-salesman", (req, res) => {
+router.post("/retrieve-salesman", rateLimiter.high(), (req, res) => {
   try {
     const { salesmanid } = req.body;
     let query;
@@ -89,7 +82,7 @@ router.post("/retrieve-salesman", (req, res) => {
 });
 
 // ==================== RETRIEVE SALESMEN WITHOUT ATTENDANCE ====================
-router.post("/retrieve-salesmen-without-attendance", (req, res) => {
+router.post("/retrieve-salesmen-without-attendance", rateLimiter.high(), (req, res) => {
   try {
     const { date } = req.body;
     const searchDate = date || new Date().toISOString().split('T')[0];
@@ -122,7 +115,7 @@ router.post("/retrieve-salesmen-without-attendance", (req, res) => {
 });
 
 // ==================== INSERT SALESMAN ====================
-router.post("/insert-salesman", upload.fields([
+router.post("/insert-salesman", rateLimiter.critical(), upload.fields([
   { name: 'photo', maxCount: 1 },
   { name: 'idproof', maxCount: 1 },
   { name: 'salesmansignature', maxCount: 1 },
@@ -198,7 +191,7 @@ router.post("/insert-salesman", upload.fields([
 });
 
 // ==================== UPDATE SALESMAN ====================
-router.post("/update-salesman", upload.fields([
+router.post("/update-salesman", rateLimiter.critical(), upload.fields([
   { name: 'photo', maxCount: 1 },
   { name: 'idproof', maxCount: 1 },
   { name: 'salesmansignature', maxCount: 1 },
@@ -280,7 +273,7 @@ router.post("/update-salesman", upload.fields([
 });
 
 // ==================== DELETE SALESMAN ====================
-router.post("/delete-salesman", (req, res) => {
+router.post("/delete-salesman", rateLimiter.critical(), (req, res) => {
   try {
     const { salesmanid } = req.body;
     if (!salesmanid) {

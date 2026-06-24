@@ -4,15 +4,8 @@ const router = express.Router();
 const pool = require('./pool');
 const rateLimiter = require('./rateLimiter');
 
-// Global rate limit: 100 requests per 15 minutes per IP
-router.use(rateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests, please try again after 15 minutes.'
-}));
-
 // ==================== 1. RETRIEVE SHOP OWNERS ====================
-router.post("/retrieve-shop-owners", (req, res) => {
+router.post("/retrieve-shop-owners", rateLimiter.high(), (req, res) => {
   try {
     // Frontend always fetches all owners; ignore optional shopownerid
     const query = `SELECT 
@@ -45,7 +38,7 @@ router.post("/retrieve-shop-owners", (req, res) => {
 });
 
 // ==================== 2. INSERT SHOP OWNER ====================
-router.post("/insert-shop-owner", (req, res) => {
+router.post("/insert-shop-owner", rateLimiter.critical(), (req, res) => {
   try {
     const { shopownername, shopname, mobileno, address } = req.body;
 
@@ -97,7 +90,7 @@ router.post("/insert-shop-owner", (req, res) => {
 });
 
 // ==================== 3. UPDATE SHOP OWNER ====================
-router.post("/update-shop-owner", (req, res) => {
+router.post("/update-shop-owner", rateLimiter.critical(), (req, res) => {
   try {
     const { shopownerid, shopownername, shopname, mobileno, address } = req.body;
 
@@ -155,7 +148,7 @@ router.post("/update-shop-owner", (req, res) => {
 });
 
 // ==================== 4. DELETE SHOP OWNER ====================
-router.post("/delete-shop-owner", (req, res) => {
+router.post("/delete-shop-owner", rateLimiter.critical(), (req, res) => {
   try {
     const { shopownerid } = req.body;
     if (!shopownerid) {

@@ -4,15 +4,8 @@ const router = express.Router();
 const pool = require('./pool');
 const rateLimiter = require('./rateLimiter');
 
-// Global rate limit: 100 requests per 15 minutes per IP
-router.use(rateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests, please try again after 15 minutes.'
-}));
-
 // ==================== 1. RETRIEVE SHOP GOODS ====================
-router.post("/retrieve-shop-goods", (req, res) => {
+router.post("/retrieve-shop-goods", rateLimiter.high(), (req, res) => {
   try {
     const { date, month, year } = req.body; // only these are sent by frontend
 
@@ -82,7 +75,7 @@ router.post("/retrieve-shop-goods", (req, res) => {
 });
 
 // ==================== 2. INSERT SHOP GOODS ====================
-router.post("/insert-shop-goods", (req, res) => {
+router.post("/insert-shop-goods", rateLimiter.critical(), (req, res) => {
   try {
     const { shopownerid, details, date, commission, finalamount } = req.body;
 
@@ -131,7 +124,7 @@ router.post("/insert-shop-goods", (req, res) => {
 });
 
 // ==================== 3. UPDATE SHOP GOODS ====================
-router.post("/update-shop-goods", (req, res) => {
+router.post("/update-shop-goods", rateLimiter.critical(), (req, res) => {
   try {
     const { shopgoodsid, shopownerid, details, date, commission, finalamount } = req.body;
 
@@ -189,7 +182,7 @@ router.post("/update-shop-goods", (req, res) => {
 });
 
 // ==================== 4. DELETE SHOP GOODS ====================
-router.post("/delete-shop-goods", (req, res) => {
+router.post("/delete-shop-goods", rateLimiter.critical(), (req, res) => {
   try {
     const { shopgoodsid } = req.body;
     if (!shopgoodsid) {

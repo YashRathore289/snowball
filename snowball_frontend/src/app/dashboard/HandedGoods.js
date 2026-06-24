@@ -127,14 +127,14 @@ export default function HandedGoodsManagement({ cacheKey }) {
   }, [cacheKey, date, salesmen, products, batteryOptions]);
 
   // ---------- data fetching ----------
-  const fetchSalesmen = useCallback(async () => {
+  const fetchSalesmen = useCallback(async (fetchDate) => {
     try {
-      const result = await postData('employee/retrieve-salesmen-without-attendance', { date });
+      const result = await postData('employee/retrieve-salesmen-without-attendance', { date: fetchDate || date });
       if (result?.status) setSalesmen(result.data || []);
     } catch (error) {
       console.error('Error fetching salesmen:', error);
     }
-  }, [date]);
+  }, []); // No dependencies, accepts date parameter
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -177,21 +177,42 @@ export default function HandedGoodsManagement({ cacheKey }) {
   const fetchAllLookups = useCallback(async () => {
     setLoadingLookups(true);
     try {
-      await Promise.all([fetchSalesmen(), fetchProducts(), fetchBatteries(), fetchAssignedBatteries()]);
+      // Sequential with delays to avoid rate limit
+      if (products.length === 0) {
+        await fetchProducts();
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      if (batteryOptions.length === 0) {
+        await fetchBatteries();
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      await fetchSalesmen(date);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await fetchAssignedBatteries();
     } catch (error) {
       console.error('Error fetching lookups:', error);
     } finally {
       setLoadingLookups(false);
     }
-  }, [fetchSalesmen, fetchProducts, fetchBatteries, fetchAssignedBatteries]);
+  }, [fetchSalesmen, fetchProducts, fetchBatteries, fetchAssignedBatteries, products.length, batteryOptions.length]);
 
   useEffect(() => {
-    fetchAllLookups();
-  }, [fetchAllLookups]);
+    if (products.length === 0 || batteryOptions.length === 0 || salesmen.length === 0) {
+      fetchAllLookups();
+    }
+  }, []);
 
   useEffect(() => {
-    fetchSalesmen();
-  }, [date, fetchSalesmen]);
+    const fetchData = async () => {
+      try {
+        const result = await postData('employee/retrieve-salesmen-without-attendance', { date });
+        if (result?.status) setSalesmen(result.data || []);
+      } catch (error) {
+        console.error('Error fetching salesmen:', error);
+      }
+    };
+    fetchData();
+  }, [date]); // Only depends on date
 
   const fetchRecords = useCallback(async () => {
     setLoadingRecords(true);
@@ -316,7 +337,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
       return;
     }
     setCards(prev => [...prev, newCard(prev.length + 1)]);
-    fetchSalesmen();
+    fetchSalesmen(date);
   }, [editCards, showToast, fetchSalesmen]);
 
   const removeCard = useCallback((cardid, isEdit = false) => {
@@ -357,13 +378,13 @@ export default function HandedGoodsManagement({ cacheKey }) {
       showToast('Please select a salesman first');
       return;
     }
-    
+
     // 👈 CHANGED: Allow All Big rows without qty/price
     const validRows = card.rows.filter(r => {
       if (r.isAllBig) return r.allBigExpr && r.allBigExpr.trim();
       return r.productid && r.qty && r.price;
     });
-    
+
     if (validRows.length === 0) {
       showToast('Add at least one item with name, quantity and price');
       return;
@@ -434,10 +455,9 @@ export default function HandedGoodsManagement({ cacheKey }) {
           cardDate: saveDate,
         }, isEdit);
 
-        await Promise.all([
-          fetchAssignedBatteries(),
-          showRecords ? fetchRecords() : null
-        ]);
+        // Only refresh what changed
+        await fetchAssignedBatteries();
+        if (showRecords) await fetchRecords();
 
         if (isEdit) {
           setTimeout(() => setEditCards([]), 1500);
@@ -489,8 +509,9 @@ export default function HandedGoodsManagement({ cacheKey }) {
       if (result?.status) {
         clearCache(cacheKey);
         showToast('Record deleted successfully!');
-        await fetchRecords();
         await fetchAssignedBatteries();
+        await fetchSalesmen();
+        if (showRecords) await fetchRecords();
       } else {
         showToast(result?.message || 'Failed to delete');
       }

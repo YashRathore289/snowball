@@ -60,10 +60,10 @@ export default function ProductManagement({ cacheKey }) {
   }, []);
 
   useEffect(() => {
-    if (!cachedData) {
+    if (!cachedData || products.length === 0) {
       fetchProducts();
     }
-  }, [fetchProducts, cachedData]);
+  }, []);
 
   // Save state to cache before unmounting
   useEffect(() => {

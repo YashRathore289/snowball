@@ -1,17 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('./pool');                 // your DB connection
-const rateLimiter = require('./rateLimiter'); // adjust path
-
-// Global rate limit for all attendance routes: 100 requests per 15 minutes
-router.use(rateLimiter({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: 'Too many requests, please try again after 15 minutes.'
-}));
+const pool = require('./pool');
+const rateLimiter = require('./rateLimiter');
 
 // ==================== 1. RETRIEVE ATTENDANCE ====================
-router.post("/retrieve-attendance", async (req, res) => {
+router.post("/retrieve-attendance", rateLimiter.high(), async (req, res) => {
     try {
         const { attendance_date, month, year } = req.body;
 
@@ -71,11 +64,7 @@ router.post("/retrieve-attendance", async (req, res) => {
 
 // ==================== 2. MARK ATTENDANCE (upsert) ====================
 // Stricter limit: 10 requests per minute per IP
-router.post("/mark-attendance", rateLimiter({
-    windowMs: 60 * 1000,
-    max: 10,
-    message: 'Too many mark requests. Please slow down.'
-}), async (req, res) => {
+router.post("/mark-attendance", rateLimiter.critical(), async (req, res) => {
     try {
         const { salesmanid, attendance_date, status } = req.body;
 
@@ -138,7 +127,7 @@ router.post("/mark-attendance", rateLimiter({
 });
 
 // ==================== 3. DELETE ATTENDANCE ====================
-router.post("/delete-attendance", async (req, res) => {
+router.post("/delete-attendance", rateLimiter.critical(), async (req, res) => {
     try {
         const { attendanceid } = req.body;
         if (!attendanceid) {
@@ -171,11 +160,7 @@ router.post("/delete-attendance", async (req, res) => {
 });
 
 // ==================== BATCH MARK ATTENDANCE ====================
-router.post("/mark-attendance-batch", rateLimiter({
-    windowMs: 60 * 1000,      // 1 minute
-    max: 5,                   // allow 5 batch calls per minute (enough)
-    message: 'Too many batch requests. Please slow down.'
-}), (req, res) => {
+router.post("/mark-attendance-batch", rateLimiter.critical(), (req, res) => {
     try {
         const { records, attendance_date } = req.body;
         // records = [ { salesmanid: 1, status: 'Present' }, { salesmanid: 2, status: 'Absent' } ]

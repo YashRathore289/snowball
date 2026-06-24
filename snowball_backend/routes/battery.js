@@ -1,17 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('./pool');               // your DB connection
-const rateLimiter = require('./rateLimiter');  // import the rate limiter
-
-// Apply global rate limit: 100 requests per 15 min per IP
-router.use(rateLimiter({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: 'Too many requests, please try again after 15 minutes.'
-}));
+const rateLimiter = require('./rateLimiter');
 
 // ==================== 1. RETRIEVE ALL BATTERIES ====================
-router.post("/retrieve-batteries", (req, res) => {
+router.post("/retrieve-batteries", rateLimiter.low(), (req, res) => {
     try {
         const query = `SELECT 
             batteryid,
@@ -40,7 +33,7 @@ router.post("/retrieve-batteries", (req, res) => {
 });
 
 // ==================== 2. INSERT BATTERY ====================
-router.post("/insert-battery", (req, res) => {
+router.post("/insert-battery", rateLimiter.critical(), (req, res) => {
     try {
         const { batteryname } = req.body;
         if (!batteryname) {
@@ -80,7 +73,7 @@ router.post("/insert-battery", (req, res) => {
 });
 
 // ==================== 3. UPDATE BATTERY ====================
-router.post("/update-battery", (req, res) => {
+router.post("/update-battery", rateLimiter.critical(), (req, res) => {
     try {
         const { batteryid, batteryname } = req.body;
         if (!batteryid || !batteryname) {
@@ -127,7 +120,7 @@ router.post("/update-battery", (req, res) => {
 });
 
 // ==================== 4. DELETE BATTERY ====================
-router.post("/delete-battery", (req, res) => {
+router.post("/delete-battery", rateLimiter.critical(), (req, res) => {
     try {
         const { batteryid } = req.body;
         if (!batteryid) {

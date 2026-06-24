@@ -4,15 +4,8 @@ const router = express.Router();
 const pool = require('./pool');
 const rateLimiter = require('./rateLimiter');
 
-// Global rate limit: 100 requests per 15 minutes per IP
-router.use(rateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests, please try again after 15 minutes.'
-}));
-
 // ==================== 1. RETRIEVE PRODUCTS ====================
-router.post("/retrieve-products", (req, res) => {
+router.post("/retrieve-products", rateLimiter.high(), (req, res) => {
   try {
     // Frontend never sends productid for listing; only need to fetch all
     const query = `SELECT 
@@ -42,7 +35,7 @@ router.post("/retrieve-products", (req, res) => {
 });
 
 // ==================== 2. INSERT PRODUCT ====================
-router.post("/insert-product", (req, res) => {
+router.post("/insert-product", rateLimiter.critical(), (req, res) => {
   try {
     const { productname, productprice } = req.body;
     if (!productname || !productprice) {
@@ -81,7 +74,7 @@ router.post("/insert-product", (req, res) => {
 });
 
 // ==================== 3. UPDATE PRODUCT ====================
-router.post("/update-product", (req, res) => {
+router.post("/update-product", rateLimiter.critical(), (req, res) => {
   try {
     const { productid, productname, productprice } = req.body;
     if (!productid) {
@@ -132,7 +125,7 @@ router.post("/update-product", (req, res) => {
 });
 
 // ==================== 4. DELETE PRODUCT ====================
-router.post("/delete-product", (req, res) => {
+router.post("/delete-product", rateLimiter.critical(), (req, res) => {
   try {
     const { productid } = req.body;
     if (!productid) {

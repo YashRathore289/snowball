@@ -65,8 +65,10 @@ export default function AccountManagement({ cacheKey }) {
     }, []);
 
     useEffect(() => {
-        fetchSalesmen();
-    }, [fetchSalesmen]);
+        if (salesmen.length === 0 || !cachedData) {
+            fetchSalesmen();
+        }
+    }, []);
 
     const fetchSalesmanEntries = useCallback(async (salesmanid, from_date = '', to_date = '') => {
         setLoading(true);
@@ -101,8 +103,7 @@ export default function AccountManagement({ cacheKey }) {
         setViewMode('list');
         setSelectedSalesman(null);
         setEntries([]);
-        fetchSalesmen();
-    }, [fetchSalesmen]);
+    }, []);
 
     const handleDateFilter = useCallback(() => {
         if (selectedSalesman && fromDate && toDate) {
@@ -161,8 +162,13 @@ export default function AccountManagement({ cacheKey }) {
             if (result?.status) {
                 clearCache(cacheKey);
                 showToast('Settlement saved successfully!');
-                fetchSalesmen();
-                fetchSalesmanEntries(selectedSalesman.salesmanid, fromDate, toDate);
+                // Only refresh what changed - the current salesman's data
+                fetchSalesmen(); // Need this to update cleared status in list
+                if (fromDate && toDate) {
+                    fetchSalesmanEntries(selectedSalesman.salesmanid, fromDate, toDate);
+                } else {
+                    fetchSalesmanEntries(selectedSalesman.salesmanid);
+                }
             } else {
                 showToast(result?.message || 'Failed to save settlement');
             }

@@ -4,15 +4,8 @@ const router = express.Router();
 const pool = require('./pool');
 const rateLimiter = require('./rateLimiter');
 
-// Global rate limit for all debt routes: 100 requests per 15 minutes per IP
-router.use(rateLimiter({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: 'Too many requests, please try again after 15 minutes.'
-}));
-
 // ==================== 1. RETRIEVE DEBTS ====================
-router.post("/retrieve-debts", (req, res) => {
+router.post("/retrieve-debts", rateLimiter.low(), (req, res) => {
     try {
         const { debtid, salesmanid } = req.body;
 
@@ -82,7 +75,7 @@ router.post("/retrieve-debts", (req, res) => {
 });
 
 // ==================== 2. INSERT DEBT ====================
-router.post("/insert-debt", (req, res) => {
+router.post("/insert-debt", rateLimiter.critical(), (req, res) => {
     try {
         const { salesmanid, type, debt_date, amount } = req.body;
 
@@ -133,7 +126,7 @@ router.post("/insert-debt", (req, res) => {
 });
 
 // ==================== 3. UPDATE DEBT ====================
-router.post("/update-debt", (req, res) => {
+router.post("/update-debt", rateLimiter.critical(), (req, res) => {
     try {
         const { debtid, salesmanid, type, debt_date, amount } = req.body;
 
@@ -188,7 +181,7 @@ router.post("/update-debt", (req, res) => {
 });
 
 // ==================== 4. DELETE DEBT ====================
-router.post("/delete-debt", (req, res) => {
+router.post("/delete-debt", rateLimiter.critical(), (req, res) => {
     try {
         const { debtid } = req.body;
 

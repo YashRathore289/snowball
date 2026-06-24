@@ -162,15 +162,15 @@ export default function AttendanceManagement({ cacheKey }) {
     }, [showConfirm, performDelete]);
 
     useEffect(() => {
-        if (!cachedData) {
+        if (!cachedData || salesmen.length === 0) {
             fetchSalesmen();
         }
-    }, [fetchSalesmen, cachedData]);
+    }, []);
 
     // ALWAYS fetch attendance (it changes daily)
     useEffect(() => {
         fetchAttendance();
-    }, [fetchAttendance]);
+    }, [selectedDate, currentMonth, currentYear, viewMode]);
 
     // Save state to cache before unmounting
     useEffect(() => {
