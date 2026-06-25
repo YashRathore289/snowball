@@ -133,7 +133,7 @@ router.post("/insert-salesman", rateLimiter.critical(), upload.fields([
       whatsappno, idproof, bankname, accountno,
       ifsccode, aadharno, panno, licenseno,
       salesmansignature, ownersignature, createdat, updatedat
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`;
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`;
 
     const values = [
       req.body.fullname || null,
