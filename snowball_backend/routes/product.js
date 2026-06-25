@@ -1,20 +1,19 @@
-// productRoutes.js
 const express = require('express');
 const router = express.Router();
 const pool = require('./pool');
 const rateLimiter = require('./rateLimiter');
 
-// ==================== 1. RETRIEVE PRODUCTS ====================
+// ==================== 1. RETRIEVE PRODUCTS (Sorted by sort_order) ====================
 router.post("/retrieve-products", rateLimiter.high(), (req, res) => {
   try {
-    // Frontend never sends productid for listing; only need to fetch all
     const query = `SELECT 
       productid, 
       productname, 
       productprice,
+      sort_order,
       DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
       DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') AS updatedat
-    FROM products ORDER BY productname`;
+    FROM products ORDER BY sort_order ASC, productname ASC`;
 
     pool.query(query, (error, result) => {
       if (error) {
@@ -42,31 +41,39 @@ router.post("/insert-product", rateLimiter.critical(), (req, res) => {
       return res.status(400).json({ status: false, message: "Product name and price are required" });
     }
 
-    pool.query(
-      "INSERT INTO products (productname, productprice, createdat, updatedat) VALUES (?, ?, NOW(), NOW())",
-      [productname, productprice],
-      (error, result) => {
-        if (error) {
-          console.error(error);
-          return res.status(500).json({ status: false, message: "Database Error" });
-        }
-
-        // Return the inserted product
-        pool.query(
-          `SELECT productid, productname, productprice,
-          DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
-          DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') AS updatedat
-          FROM products WHERE productid = ?`,
-          [result.insertId],
-          (err, rows) => {
-            if (err) {
-              return res.status(200).json({ status: true, message: "Product added", data: { productid: result.insertId } });
-            }
-            return res.status(200).json({ status: true, message: "Product added successfully", data: rows[0] });
-          }
-        );
+    // Get max sort_order
+    pool.query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM products", (err, orderResult) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ status: false, message: "Database Error" });
       }
-    );
+      const nextOrder = orderResult[0].next_order;
+
+      pool.query(
+        "INSERT INTO products (productname, productprice, sort_order, createdat, updatedat) VALUES (?, ?, ?, NOW(), NOW())",
+        [productname, productprice, nextOrder],
+        (error, result) => {
+          if (error) {
+            console.error(error);
+            return res.status(500).json({ status: false, message: "Database Error" });
+          }
+
+          pool.query(
+            `SELECT productid, productname, productprice, sort_order,
+            DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
+            DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') AS updatedat
+            FROM products WHERE productid = ?`,
+            [result.insertId],
+            (err, rows) => {
+              if (err) {
+                return res.status(200).json({ status: true, message: "Product added", data: { productid: result.insertId } });
+              }
+              return res.status(200).json({ status: true, message: "Product added successfully", data: rows[0] });
+            }
+          );
+        }
+      );
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ status: false, message: "Technical Issue" });
@@ -103,9 +110,8 @@ router.post("/update-product", rateLimiter.critical(), (req, res) => {
         return res.status(404).json({ status: false, message: "Product not found" });
       }
 
-      // Return the updated product
       pool.query(
-        `SELECT productid, productname, productprice,
+        `SELECT productid, productname, productprice, sort_order,
         DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
         DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') AS updatedat
         FROM products WHERE productid = ?`,
@@ -132,7 +138,6 @@ router.post("/delete-product", rateLimiter.critical(), (req, res) => {
       return res.status(400).json({ status: false, message: "Product ID is required" });
     }
 
-    // Fetch before delete to return data
     pool.query(
       "SELECT productid, productname, productprice FROM products WHERE productid = ?",
       [productid],
@@ -155,6 +160,41 @@ router.post("/delete-product", rateLimiter.critical(), (req, res) => {
         });
       }
     );
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ status: false, message: "Technical Issue" });
+  }
+});
+
+// ==================== 5. UPDATE PRODUCT SORT ORDER ====================
+router.post("/update-product-sort-order", rateLimiter.critical(), (req, res) => {
+  try {
+    const { products } = req.body; // [{ productid: 1, sort_order: 0 }, { productid: 2, sort_order: 1 }]
+
+    if (!Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ status: false, message: "Products array is required" });
+    }
+
+    let completed = 0;
+    const total = products.length;
+    const errors = [];
+
+    products.forEach(({ productid, sort_order }) => {
+      pool.query(
+        "UPDATE products SET sort_order = ?, updatedat = NOW() WHERE productid = ?",
+        [sort_order, productid],
+        (err) => {
+          if (err) errors.push({ productid, error: err.sqlMessage });
+          completed++;
+          if (completed === total) {
+            if (errors.length > 0) {
+              return res.status(200).json({ status: true, message: "Sort order updated with some errors", errors });
+            }
+            return res.status(200).json({ status: true, message: "Sort order updated successfully" });
+          }
+        }
+      );
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ status: false, message: "Technical Issue" });

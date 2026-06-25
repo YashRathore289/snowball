@@ -558,9 +558,6 @@ export default function SalesmanDetails({ cacheKey }) {
                                     salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'
                                 )}
                             </div>
-                            <div className="mt-2 flex items-center gap-2">
-                                <span className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-full">ID: {salesman.salesmanid}</span>
-                            </div>
                             <h3 className="text-lg font-semibold text-gray-900 text-center">{salesman.fullname || 'N/A'}</h3>
                         </div>
                     </div>

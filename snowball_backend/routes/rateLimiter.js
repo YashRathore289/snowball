@@ -9,9 +9,9 @@ const PRIORITY = {
 };
 
 const DEFAULT_LIMITS = {
-  [PRIORITY.CRITICAL]: { windowMs: 1 * 60 * 1000, max: 50 },    // 50 critical ops per minute
-  [PRIORITY.HIGH]: { windowMs: 1 * 60 * 1000, max: 30 },         // 30 single lookups per minute
-  [PRIORITY.LOW]: { windowMs: 1 * 60 * 1000, max: 15 }           // 15 bulk retrievals per minute
+  [PRIORITY.CRITICAL]: { windowMs: 1 * 60 * 1000, max: 100 },    // 50 critical ops per minute
+  [PRIORITY.HIGH]: { windowMs: 1 * 60 * 1000, max: 60 },         // 30 single lookups per minute
+  [PRIORITY.LOW]: { windowMs: 1 * 60 * 1000, max: 30 }           // 15 bulk retrievals per minute
 };
 
 function rateLimiter(options = {}) {

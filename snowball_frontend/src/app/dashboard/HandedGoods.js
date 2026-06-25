@@ -404,12 +404,14 @@ export default function HandedGoodsManagement({ cacheKey }) {
         batteries: card.batteries || [],
         items: validRows.map(r => {
           if (r.isAllBig) {
+            const evaluatedValue = evaluateExpression(r.allBigExpr) || 0;
+            const multipliedValue = evaluatedValue * 10;
             return {
               productid: 'allbig',
               productname: 'All Big',
-              qty: evaluateExpression(r.allBigExpr) || 0,
+              qty: multipliedValue,
               price: 1,
-              total: evaluateExpression(r.allBigExpr) || 0,
+              total: multipliedValue,
               isAllBig: true,
               allBigExpr: r.allBigExpr,
             };
@@ -746,7 +748,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
                         className={`${inputBase} flex-1 min-w-0`}
                       />
                       <div className={`${inputBase} w-20 text-end bg-gray-50 text-gray-700`}>
-                        ₹{(evaluateExpression(row.allBigExpr) || 0).toFixed(0)}
+                        ₹{((evaluateExpression(row.allBigExpr) || 0) * 10).toFixed(0)}
                       </div>
                     </>
                   ) : (
