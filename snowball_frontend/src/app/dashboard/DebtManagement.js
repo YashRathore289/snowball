@@ -85,7 +85,7 @@ export default function DebtManagement({ cacheKey }) {
       const result = await postData('employee/retrieve-salesman', {});
       if (result?.status) {
         setSalesmen(result.data);
-        await fetchAllSalesmenDebtSummary(result.data);
+        await fetchAllSalesmenDebtSummary();
       }
     } catch (error) {
       console.error('Error fetching salesmen:', error);
@@ -94,32 +94,25 @@ export default function DebtManagement({ cacheKey }) {
     }
   }, []);
 
-  const fetchAllSalesmenDebtSummary = async (salesmenList) => {
+  const fetchAllSalesmenDebtSummary = useCallback(async () => {
     try {
-      const summaryData = {};
-      for (const salesman of salesmenList) {
-        const result = await postData('debt/retrieve-debts', { salesmanid: salesman.salesmanid });
-        if (result?.status) {
-          let given = 0;
-          let received = 0;
-          result.data.forEach(debt => {
-            const amount = parseFloat(debt.amount) || 0;
-            if (debt.type === 'give') given += amount;
-            else if (debt.type === 'receive') received += amount;
-          });
-          summaryData[salesman.salesmanid] = {
-            totalGiven: given,
-            totalReceived: received,
-            remaining: given - received,
-            hasDebt: result.data.length > 0,
+      const result = await postData('debt/retrieve-all-debts-summary', {});
+      if (result?.status) {
+        const summaryData = {};
+        result.data.forEach(row => {
+          summaryData[row.salesmanid] = {
+            totalGiven: parseFloat(row.totalGiven) || 0,
+            totalReceived: parseFloat(row.totalReceived) || 0,
+            remaining: parseFloat(row.remaining) || 0,
+            hasDebt: row.hasDebt === 1,
           };
-        }
+        });
+        setSalesmanDebtSummary(summaryData);
       }
-      setSalesmanDebtSummary(summaryData);
     } catch (error) {
       console.error('Error fetching debt summaries:', error);
     }
-  };
+  }, []);
 
   // Fetch debts for a specific salesman
   const fetchSalesmanDebts = useCallback(async (salesmanid) => {
@@ -165,7 +158,7 @@ export default function DebtManagement({ cacheKey }) {
     setViewMode('list');
     setSelectedSalesman(null);
     setDebts([]);
-    fetchAllSalesmenDebtSummary(salesmen);
+    fetchAllSalesmenDebtSummary();
   }, [salesmen]);
 
   const handleAddDebt = useCallback((type) => {
@@ -211,7 +204,7 @@ export default function DebtManagement({ cacheKey }) {
           showToast('Debt record updated successfully!');
           setIsModalOpen(false);
           fetchSalesmanDebts(selectedSalesman.salesmanid);
-          fetchAllSalesmenDebtSummary(salesmen);
+          fetchAllSalesmenDebtSummary();
         } else {
           showToast(result?.message || 'Failed to update');
         }
@@ -435,7 +428,7 @@ export default function DebtManagement({ cacheKey }) {
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <button
                           onClick={() => handleSalesmanClick(salesman)}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm cursor-pointer"
+                          className={`px-4 py-2 ${sum.hasDebt ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg transition-colors text-sm cursor-pointer`}
                         >
                           {sum.hasDebt ? 'View Details' : 'Add Debt'}
                         </button>

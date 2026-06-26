@@ -4,7 +4,6 @@ import { postData } from '@/Services';
 import { saveCache, getCache, clearCache } from './ComponentCache';
 
 export default function AttendanceManagement({ cacheKey }) {
-    // Restore from cache if available
     const cachedData = cacheKey ? getCache(cacheKey) : null;
 
     const [salesmen, setSalesmen] = useState(cachedData?.salesmen || []);
@@ -14,17 +13,14 @@ export default function AttendanceManagement({ cacheKey }) {
     const [currentMonth, setCurrentMonth] = useState(cachedData?.currentMonth || new Date().getMonth() + 1);
     const [currentYear, setCurrentYear] = useState(cachedData?.currentYear || new Date().getFullYear());
     const [viewMode, setViewMode] = useState(cachedData?.viewMode || 'daily');
+    const [searchTerm, setSearchTerm] = useState('');
 
-    // ---- Toast state ----
     const [toastMessage, setToastMessage] = useState('');
     const [toastVisible, setToastVisible] = useState(false);
-
-    // ---- Confirmation popup state ----
     const [confirmVisible, setConfirmVisible] = useState(false);
     const [confirmMessage, setConfirmMessage] = useState('');
     const [confirmAction, setConfirmAction] = useState(null);
 
-    // Auto-dismiss toast after 5 seconds
     useEffect(() => {
         if (!toastVisible) return;
         const timer = setTimeout(() => setToastVisible(false), 5000);
@@ -42,7 +38,6 @@ export default function AttendanceManagement({ cacheKey }) {
         setConfirmVisible(true);
     }, []);
 
-    // Fetch all salesmen
     const fetchSalesmen = useCallback(async () => {
         try {
             const result = await postData('employee/retrieve-salesman', {});
@@ -54,7 +49,6 @@ export default function AttendanceManagement({ cacheKey }) {
         }
     }, []);
 
-    // Fetch attendance based on view mode
     const fetchAttendance = useCallback(async () => {
         setLoading(true);
         try {
@@ -81,7 +75,6 @@ export default function AttendanceManagement({ cacheKey }) {
         }
     }, [selectedDate, currentMonth, currentYear, viewMode]);
 
-    // Mark single attendance
     const markAttendance = useCallback(async (salesmanid, status) => {
         try {
             const result = await postData('attendance/mark-attendance', {
@@ -91,13 +84,13 @@ export default function AttendanceManagement({ cacheKey }) {
             });
             if (result?.status) {
                 clearCache(cacheKey);
-                // Directly fetch fresh data
                 const freshResult = await postData('attendance/retrieve-attendance', {
                     attendance_date: selectedDate,
                 });
                 if (freshResult?.status) {
                     setAttendance(freshResult.data);
                 }
+                fetchSalesmen();
             } else {
                 showToast(result?.message || 'Failed to mark attendance');
             }
@@ -105,39 +98,8 @@ export default function AttendanceManagement({ cacheKey }) {
             console.error('Error marking attendance:', error);
             showToast('Error marking attendance');
         }
-    }, [selectedDate, showToast, cacheKey]);
+    }, [selectedDate, showToast, cacheKey, fetchSalesmen]);
 
-    // Batch mark all salesmen
-    const markAllAttendance = useCallback(async (status) => {
-        const records = salesmen.map(s => ({
-            salesmanid: s.salesmanid,
-            status,
-        }));
-        try {
-            const result = await postData('attendance/mark-attendance-batch', {
-                records,
-                attendance_date: selectedDate,
-            });
-            if (result?.status) {
-                clearCache(cacheKey);
-                showToast(`All marked as ${status} successfully!`);
-                // Directly fetch fresh data instead of using the memoized fetchAttendance
-                const freshResult = await postData('attendance/retrieve-attendance', {
-                    attendance_date: selectedDate,
-                });
-                if (freshResult?.status) {
-                    setAttendance(freshResult.data);
-                }
-            } else {
-                showToast(result?.message || 'Failed to mark all');
-            }
-        } catch (error) {
-            console.error('Error batch marking:', error);
-            showToast('Error marking attendance');
-        }
-    }, [salesmen, selectedDate, showToast, cacheKey]);
-
-    // Delete attendance record
     const performDelete = useCallback(async (attendanceid) => {
         try {
             const result = await postData('attendance/delete-attendance', { attendanceid });
@@ -145,6 +107,7 @@ export default function AttendanceManagement({ cacheKey }) {
                 clearCache(cacheKey);
                 showToast('Attendance record deleted successfully!');
                 fetchAttendance();
+                fetchSalesmen();
             } else {
                 showToast(result?.message || 'Failed to delete');
             }
@@ -152,14 +115,46 @@ export default function AttendanceManagement({ cacheKey }) {
             console.error('Error deleting attendance:', error);
             showToast('Error deleting attendance record');
         }
-    }, [fetchAttendance, showToast]);
+    }, [fetchAttendance, showToast, cacheKey, fetchSalesmen]);
 
     const handleDelete = useCallback((attendanceid) => {
-        showConfirm(
-            'Are you sure you want to delete this attendance record?',
-            () => performDelete(attendanceid)
-        );
+        showConfirm('Are you sure you want to delete this attendance record?', () => performDelete(attendanceid));
     }, [showConfirm, performDelete]);
+
+    // Clear all attendance for the selected date
+    const handleClearAll = useCallback(() => {
+        if (attendance.length === 0) {
+            showToast('No attendance records to clear');
+            return;
+        }
+        showConfirm(
+            `Are you sure you want to clear ALL ${attendance.length} attendance records for this date?`,
+            async () => {
+                try {
+                    for (const record of attendance) {
+                        await postData('attendance/delete-attendance', { attendanceid: record.attendanceid });
+                    }
+                    clearCache(cacheKey);
+                    showToast('All attendance records cleared!');
+                    fetchAttendance();
+                    fetchSalesmen();
+                } catch (error) {
+                    console.error('Error clearing all:', error);
+                    showToast('Error clearing records');
+                }
+            }
+        );
+    }, [attendance, showConfirm, showToast, cacheKey, fetchAttendance, fetchSalesmen]);
+
+    // Filtered salesmen based on search
+    const filteredSalesmen = useMemo(() => {
+        if (!searchTerm.trim()) return salesmen;
+        const term = searchTerm.toLowerCase();
+        return salesmen.filter(s => 
+            s.fullname?.toLowerCase().includes(term) || 
+            s.mobileno?.includes(term)
+        );
+    }, [salesmen, searchTerm]);
 
     useEffect(() => {
         if (!cachedData || salesmen.length === 0) {
@@ -167,12 +162,10 @@ export default function AttendanceManagement({ cacheKey }) {
         }
     }, []);
 
-    // ALWAYS fetch attendance (it changes daily)
     useEffect(() => {
         fetchAttendance();
     }, [selectedDate, currentMonth, currentYear, viewMode]);
 
-    // Save state to cache before unmounting
     useEffect(() => {
         return () => {
             if (cacheKey) {
@@ -188,7 +181,6 @@ export default function AttendanceManagement({ cacheKey }) {
         };
     }, [cacheKey, salesmen, attendance, selectedDate, currentMonth, currentYear, viewMode]);
 
-    // Derived data (memoized)
     const dailyAttendanceMap = useMemo(() => {
         const map = {};
         attendance.forEach(record => {
@@ -231,10 +223,8 @@ export default function AttendanceManagement({ cacheKey }) {
         'July', 'August', 'September', 'October', 'November', 'December'
     ], []);
 
-    // ---------- RENDER FUNCTIONS ----------
     const renderDailyView = useCallback(() => (
         <div>
-            {/* Daily Summary */}
             {attendance.length > 0 && (
                 <div className="mt-6 mb-5 grid grid-cols-2 md:grid-cols-2 gap-3">
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
@@ -247,8 +237,8 @@ export default function AttendanceManagement({ cacheKey }) {
                     </div>
                 </div>
             )}
-            {/* Date Selector */}
-            <div className="flex items-center justify-between mb-6">
+
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
                 <div className="flex items-center gap-4">
                     <div>
                         <label className="text-sm font-bold text-black">Date</label>
@@ -268,23 +258,28 @@ export default function AttendanceManagement({ cacheKey }) {
                         })}
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => markAllAttendance('Present')}
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer"
-                    >
-                        Mark All Present
-                    </button>
-                    <button
-                        onClick={() => markAllAttendance('Absent')}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer"
-                    >
-                        Mark All Absent
-                    </button>
+
+                <div className="flex gap-2 items-center">
+                    {/* Search Bar */}
+                    <input
+                        type="text"
+                        placeholder="Search salesman..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+                    />
+                    {/* Clear All Button */}
+                    {attendance.length > 0 && (
+                        <button
+                            onClick={handleClearAll}
+                            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer"
+                        >
+                            Clear All
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Salesman Table */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -297,67 +292,72 @@ export default function AttendanceManagement({ cacheKey }) {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {salesmen.map((salesman, index) => {
-                                const record = dailyAttendanceMap[salesman.salesmanid];
-                                const status = record?.status || 'Not Marked';
-                                const attendanceId = record?.attendanceid;
+                            {filteredSalesmen.length === 0 ? (
+                                <tr>
+                                    <td colSpan="4" className="px-6 py-4 text-center text-sm text-gray-500">
+                                        {searchTerm ? 'No salesmen match your search' : 'No salesmen found'}
+                                    </td>
+                                </tr>
+                            ) : (
+                                filteredSalesmen.map((salesman, index) => {
+                                    const record = dailyAttendanceMap[salesman.salesmanid];
+                                    const status = record?.status || 'Not Marked';
+                                    const attendanceId = record?.attendanceid;
 
-                                return (
-                                    <tr key={salesman.salesmanid} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{salesman.fullname}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadge(status)}`}>
-                                                {status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => markAttendance(salesman.salesmanid, 'Present')}
-                                                    className={`px-3 py-1 rounded-lg transition-colors text-xs font-medium cursor-pointer ${status === 'Present'
-                                                        ? 'bg-green-200 text-green-800 cursor-default'
-                                                        : 'bg-green-600 hover:bg-green-700 text-white'
-                                                        }`}
-                                                    disabled={status === 'Present'}
-                                                >
-                                                    Present
-                                                </button>
-                                                <button
-                                                    onClick={() => markAttendance(salesman.salesmanid, 'Absent')}
-                                                    className={`px-3 py-1 rounded-lg transition-colors text-xs font-medium cursor-pointer ${status === 'Absent'
-                                                        ? 'bg-red-200 text-red-800 cursor-default'
-                                                        : 'bg-red-600 hover:bg-red-700 text-white'
-                                                        }`}
-                                                    disabled={status === 'Absent'}
-                                                >
-                                                    Absent
-                                                </button>
-                                                {attendanceId && (
+                                    return (
+                                        <tr key={salesman.salesmanid} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{salesman.fullname}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadge(status)}`}>
+                                                    {status}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                <div className="flex gap-2">
                                                     <button
-                                                        onClick={() => handleDelete(attendanceId)}
-                                                        className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors cursor-pointer"
+                                                        onClick={() => markAttendance(salesman.salesmanid, 'Present')}
+                                                        className={`px-3 py-1 rounded-lg transition-colors text-xs font-medium cursor-pointer ${status === 'Present'
+                                                            ? 'bg-green-200 text-green-800 cursor-default'
+                                                            : 'bg-green-600 hover:bg-green-700 text-white'
+                                                            }`}
+                                                        disabled={status === 'Present'}
                                                     >
-                                                        Clear
+                                                        Present
                                                     </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
+                                                    <button
+                                                        onClick={() => markAttendance(salesman.salesmanid, 'Absent')}
+                                                        className={`px-3 py-1 rounded-lg transition-colors text-xs font-medium cursor-pointer ${status === 'Absent'
+                                                            ? 'bg-red-200 text-red-800 cursor-default'
+                                                            : 'bg-red-600 hover:bg-red-700 text-white'
+                                                            }`}
+                                                        disabled={status === 'Absent'}
+                                                    >
+                                                        Absent
+                                                    </button>
+                                                    {attendanceId && (
+                                                        <button
+                                                            onClick={() => handleDelete(attendanceId)}
+                                                            className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors cursor-pointer"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
                         </tbody>
                     </table>
                 </div>
             </div>
-
-
         </div>
-    ), [selectedDate, markAllAttendance, salesmen, dailyAttendanceMap, getStatusBadge, markAttendance, handleDelete, attendance, dailySummary]);
+    ), [selectedDate, searchTerm, filteredSalesmen, dailyAttendanceMap, getStatusBadge, markAttendance, handleDelete, attendance, dailySummary, handleClearAll]);
 
     const renderMonthlyView = useCallback(() => (
         <div>
-            {/* Month Navigation */}
             <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-semibold text-gray-900">
                     {monthNames[currentMonth - 1]} {currentYear}
@@ -392,7 +392,6 @@ export default function AttendanceManagement({ cacheKey }) {
                 </div>
             </div>
 
-            {/* Calendar */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -441,44 +440,23 @@ export default function AttendanceManagement({ cacheKey }) {
         </div>
     ), [currentMonth, currentYear, monthNames, daysInMonth, salesmen, monthlyAttendanceMap, getStatusBadge]);
 
-    // ---------- MAIN RETURN ----------
     return (
         <div>
-            {/* Toast Notification */}
             {toastVisible && (
                 <div className="fixed top-4 right-4 z-50 bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
                     <span>{toastMessage}</span>
-                    <button
-                        onClick={() => setToastVisible(false)}
-                        className="text-white hover:text-gray-200 font-bold text-lg leading-none cursor-pointer"
-                    >
-                        ×
-                    </button>
+                    <button onClick={() => setToastVisible(false)} className="text-white hover:text-gray-200 font-bold text-lg leading-none cursor-pointer">×</button>
                 </div>
             )}
 
-            {/* Confirmation Popup */}
             {confirmVisible && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
                     <div className="bg-white rounded-xl shadow-2xl p-6 w-96 max-w-[90%]">
                         <h3 className="text-lg font-semibold text-gray-900 mb-4">Confirm Action</h3>
                         <p className="text-sm text-gray-600 mb-6">{confirmMessage}</p>
                         <div className="flex justify-end gap-3">
-                            <button
-                                onClick={() => setConfirmVisible(false)}
-                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors text-sm font-medium cursor-pointer"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => {
-                                    if (confirmAction) confirmAction();
-                                    setConfirmVisible(false);
-                                }}
-                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer"
-                            >
-                                Confirm
-                            </button>
+                            <button onClick={() => setConfirmVisible(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors text-sm font-medium cursor-pointer">Cancel</button>
+                            <button onClick={() => { if (confirmAction) confirmAction(); setConfirmVisible(false); }} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer">Confirm</button>
                         </div>
                     </div>
                 </div>
@@ -489,41 +467,26 @@ export default function AttendanceManagement({ cacheKey }) {
                 <p className="text-sm text-gray-500 mt-1">Mark and track daily attendance of salesmen</p>
             </div>
 
-            {/* View Toggle */}
             <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">
                     {viewMode === 'daily' ? 'Daily Attendance' : 'Monthly Attendance'}
                 </h3>
                 <div className="flex gap-2">
-                    <button
-                        onClick={() => setViewMode('daily')}
-                        className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium cursor-pointer ${viewMode === 'daily'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                    >
+                    <button onClick={() => setViewMode('daily')} className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium cursor-pointer ${viewMode === 'daily' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
                         Daily View
                     </button>
-                    <button
-                        onClick={() => setViewMode('monthly')}
-                        className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium cursor-pointer ${viewMode === 'monthly'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                    >
+                    <button onClick={() => setViewMode('monthly')} className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium cursor-pointer ${viewMode === 'monthly' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
                         Monthly View
                     </button>
                 </div>
             </div>
 
-            {/* Thin loading bar – never hides content */}
             {loading && (
                 <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden mb-4">
                     <div className="h-full bg-blue-600 animate-pulse rounded-full" style={{ width: '60%' }}></div>
                 </div>
             )}
 
-            {/* Always render the view – just update data */}
             {viewMode === 'daily' ? renderDailyView() : renderMonthlyView()}
         </div>
     );

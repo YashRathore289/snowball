@@ -45,7 +45,7 @@ router.post("/retrieve-salesman", rateLimiter.high(), (req, res) => {
         salesmansignature, ownersignature,
         DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
         DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') AS updatedat
-        FROM salesman WHERE salesmanid = ?`;
+        FROM salesman WHERE salesmanid = ? ORDER BY fullname`;
       values = [salesmanid];
     } else {
       query = `SELECT 
@@ -57,7 +57,7 @@ router.post("/retrieve-salesman", rateLimiter.high(), (req, res) => {
         salesmansignature, ownersignature,
         DATE_FORMAT(createdat, '%Y-%m-%d %H:%i:%s') AS createdat,
         DATE_FORMAT(updatedat, '%Y-%m-%d %H:%i:%s') AS updatedat
-        FROM salesman ORDER BY salesmanid DESC`;
+        FROM salesman ORDER BY fullname`;
     }
 
     pool.query(query, values, (error, result) => {
@@ -92,7 +92,7 @@ router.post("/retrieve-salesmen-without-attendance", rateLimiter.high(), (req, r
       FROM salesman s
       LEFT JOIN handed_goods hg ON s.salesmanid = hg.salesmanid AND hg.date = ?
       WHERE hg.handedgoodsid IS NULL
-      ORDER BY s.fullname ASC
+      ORDER BY s.fullname
     `;
 
     pool.query(query, [searchDate], (error, result) => {

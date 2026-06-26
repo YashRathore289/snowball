@@ -75,13 +75,13 @@ export default function Dashboard() {
                     {isSidebarOpen ? (
                         <div className="flex items-center space-x-2">
                             <div className="w-14 h-14 rounded-lg flex items-center justify-center">
-                                <span className="text-white font-bold text-sm"><img src='snowball.png' /></span>
+                                <span className="text-white font-bold text-sm"><img src='yash.jpeg' /></span>
                             </div>
                             <h1 className="text-xl font-semibold text-gray-900">Snow Ball</h1>
                         </div>
                     ) : (
                         <div className="w-14 h-14 rounded-lg flex items-center justify-center mx-auto">
-                            <span className="text-white font-bold text-sm"><img src='snowball.png' /></span>
+                            <span className="text-white font-bold text-sm"><img src='yash.jpeg' /></span>
                         </div>
                     )}
                     <button

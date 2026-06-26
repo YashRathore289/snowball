@@ -319,7 +319,6 @@ router.post("/monthly-sales-report", rateLimiter.low(), (req, res) => {
   }
 });
 
-// ==================== ACCOUNT SUMMARY ====================
 router.post("/retrieve-account-summary", rateLimiter.high(), (req, res) => {
   try {
     const query = `
@@ -327,14 +326,17 @@ router.post("/retrieve-account-summary", rateLimiter.high(), (req, res) => {
         s.salesmanid,
         s.fullname,
         s.mobileno,
-        hg.handedgoodsid,
-        hg.details,
-        hg.finalamount,
-        hg.submit_amount,
-        hg.clear_status
+        COALESCE(SUM(CASE WHEN hg.clear_status != 1 OR hg.clear_status IS NULL THEN 
+          CAST(JSON_EXTRACT(hg.details, '$.items[*].total') AS DECIMAL(10,2))
+        ELSE 0 END), 0) AS total_items,
+        COALESCE(SUM(CASE WHEN hg.clear_status != 1 OR hg.clear_status IS NULL THEN 
+          hg.submit_amount 
+        ELSE 0 END), 0) AS total_submit,
+        CASE WHEN MAX(CASE WHEN hg.clear_status = 1 THEN 1 ELSE 0 END) = 1 THEN 1 ELSE 0 END AS has_cleared
       FROM salesman s
       LEFT JOIN handed_goods hg ON s.salesmanid = hg.salesmanid
-      ORDER BY s.fullname ASC, hg.date ASC
+      GROUP BY s.salesmanid, s.fullname, s.mobileno
+      ORDER BY s.fullname ASC
     `;
 
     pool.query(query, (error, result) => {
@@ -343,57 +345,11 @@ router.post("/retrieve-account-summary", rateLimiter.high(), (req, res) => {
         return res.status(500).json({ status: false, message: "Database Error" });
       }
 
-      const salesmanMap = {};
-
-      // First, initialize ALL salesmen (even those with no data)
-      result.forEach(record => {
-        if (!salesmanMap[record.salesmanid]) {
-          salesmanMap[record.salesmanid] = {
-            salesmanid: record.salesmanid,
-            fullname: record.fullname,
-            mobileno: record.mobileno,
-            total_items: 0,
-            total_submit: 0,
-            has_cleared: false
-          };
-        }
-      });
-
-      // Then calculate totals
-      result.forEach(record => {
-        if (record.handedgoodsid) {
-          let details = record.details;
-          if (typeof details === 'string') {
-            details = JSON.parse(details);
-          }
-
-          let itemTotal = 0;
-          if (details?.items && Array.isArray(details.items)) {
-            itemTotal = details.items.reduce((sum, item) => {
-              return sum + (parseFloat(item.total) || parseFloat(item.qty || 0) * parseFloat(item.price || 0) || 0);
-            }, 0);
-          }
-
-          // Only add to totals if NOT cleared
-          if (record.clear_status !== 1) {
-            salesmanMap[record.salesmanid].total_items += itemTotal;
-            salesmanMap[record.salesmanid].total_submit += parseFloat(record.submit_amount) || 0;
-          }
-
-          // Track if ANY entry is cleared
-          if (record.clear_status === 1) {
-            salesmanMap[record.salesmanid].has_cleared = true;
-          }
-        }
-      });
-
-      const salesmenList = Object.values(salesmanMap);
-
       return res.status(200).json({
         status: true,
         message: "Success",
-        count: salesmenList.length,
-        data: salesmenList
+        count: result.length,
+        data: result
       });
     });
   } catch (e) {

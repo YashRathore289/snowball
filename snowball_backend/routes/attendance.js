@@ -35,7 +35,7 @@ router.post("/retrieve-attendance", rateLimiter.high(), async (req, res) => {
       FROM salesman_attendance sa
       LEFT JOIN salesman s ON sa.salesmanid = s.salesmanid
       WHERE MONTH(sa.attendance_date) = ? AND YEAR(sa.attendance_date) = ?
-      ORDER BY sa.attendance_date DESC, s.fullname`;
+      ORDER BY s.fullname`;
             values = [month, year];
         } else {
             return res.status(400).json({

@@ -5,52 +5,32 @@ const pool = require('./pool');
 const rateLimiter = require('./rateLimiter');
 
 // ==================== 1. RETRIEVE DEBTS ====================
-router.post("/retrieve-debts", rateLimiter.low(), (req, res) => {
+router.post("/retrieve-debts", rateLimiter.high(), (req, res) => {
     try {
         const { debtid, salesmanid } = req.body;
 
-        let query;
+        const baseQuery = `SELECT 
+            d.debtid,
+            d.salesmanid,
+            s.fullname AS salesman_name,
+            s.mobileno AS salesman_mobile,
+            d.type,
+            DATE_FORMAT(d.debt_date, '%Y-%m-%d') AS debt_date,
+            d.amount
+        FROM salesman_debt d
+        LEFT JOIN salesman s ON d.salesmanid = s.salesmanid`;
+
+        let query = baseQuery;
         let values = [];
 
         if (debtid) {
-            query = `SELECT 
-                d.debtid,
-                d.salesmanid,
-                s.fullname AS salesman_name,
-                s.mobileno AS salesman_mobile,
-                d.type,
-                DATE_FORMAT(d.debt_date, '%Y-%m-%d') AS debt_date,
-                d.amount
-            FROM salesman_debt d
-            LEFT JOIN salesman s ON d.salesmanid = s.salesmanid
-            WHERE d.debtid = ?`;
+            query += ' WHERE d.debtid = ?';
             values = [debtid];
         } else if (salesmanid) {
-            query = `SELECT 
-                d.debtid,
-                d.salesmanid,
-                s.fullname AS salesman_name,
-                s.mobileno AS salesman_mobile,
-                d.type,
-                DATE_FORMAT(d.debt_date, '%Y-%m-%d') AS debt_date,
-                d.amount
-            FROM salesman_debt d
-            LEFT JOIN salesman s ON d.salesmanid = s.salesmanid
-            WHERE d.salesmanid = ?
-            ORDER BY d.debt_date DESC`;
+            query += ' WHERE d.salesmanid = ? ORDER BY d.debt_date DESC';
             values = [salesmanid];
         } else {
-            query = `SELECT 
-                d.debtid,
-                d.salesmanid,
-                s.fullname AS salesman_name,
-                s.mobileno AS salesman_mobile,
-                d.type,
-                DATE_FORMAT(d.debt_date, '%Y-%m-%d') AS debt_date,
-                d.amount
-            FROM salesman_debt d
-            LEFT JOIN salesman s ON d.salesmanid = s.salesmanid
-            ORDER BY d.debt_date DESC`;
+            query += ' ORDER BY d.debt_date DESC';
         }
 
         pool.query(query, values, (error, result) => {
@@ -60,6 +40,40 @@ router.post("/retrieve-debts", rateLimiter.low(), (req, res) => {
             }
             if (debtid && result.length === 0) {
                 return res.status(404).json({ status: false, message: "Debt record not found", data: [] });
+            }
+            return res.status(200).json({
+                status: true,
+                message: "Success",
+                count: result.length,
+                data: result
+            });
+        });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ status: false, message: "Technical Issue" });
+    }
+});
+
+router.post("/retrieve-all-debts-summary", rateLimiter.high(), (req, res) => {
+    try {
+        const query = `SELECT 
+            s.salesmanid,
+            s.fullname,
+            s.mobileno,
+            COALESCE(SUM(CASE WHEN d.type = 'give' THEN d.amount ELSE 0 END), 0) AS totalGiven,
+            COALESCE(SUM(CASE WHEN d.type = 'receive' THEN d.amount ELSE 0 END), 0) AS totalReceived,
+            COALESCE(SUM(CASE WHEN d.type = 'give' THEN d.amount ELSE 0 END), 0) - 
+            COALESCE(SUM(CASE WHEN d.type = 'receive' THEN d.amount ELSE 0 END), 0) AS remaining,
+            CASE WHEN COUNT(d.debtid) > 0 THEN 1 ELSE 0 END AS hasDebt
+        FROM salesman s
+        LEFT JOIN salesman_debt d ON s.salesmanid = d.salesmanid
+        GROUP BY s.salesmanid, s.fullname, s.mobileno
+        ORDER BY s.fullname`;
+
+        pool.query(query, (error, result) => {
+            if (error) {
+                console.error(error);
+                return res.status(500).json({ status: false, message: "Database Error" });
             }
             return res.status(200).json({
                 status: true,

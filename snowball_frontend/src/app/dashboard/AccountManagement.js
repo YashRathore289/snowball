@@ -30,6 +30,7 @@ export default function AccountManagement({ cacheKey }) {
     const [returnAmount, setReturnAmount] = useState(cachedData?.returnAmount || '');
     const [commissionAmount, setCommissionAmount] = useState(cachedData?.commissionAmount || '');
     const [saving, setSaving] = useState(false);
+    const [searchTerm, setSearchTerm] = useState(''); // 👈 NEW
 
     // Date filter states
     const [fromDate, setFromDate] = useState('');
@@ -49,6 +50,27 @@ export default function AccountManagement({ cacheKey }) {
         setToastMessage(msg);
         setToastVisible(true);
     }, []);
+
+    // 👈 NEW: Filtered salesmen - hide if cleared (total_items = 0 and has_cleared = 1)
+    const filteredSalesmen = useMemo(() => {
+        let filtered = salesmen;
+        
+        // Filter by search term
+        if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase();
+            filtered = filtered.filter(s => 
+                s.fullname?.toLowerCase().includes(term) || 
+                s.mobileno?.includes(term)
+            );
+        }
+        
+        // Hide salesmen with no pending items (cleared and 0 total)
+        filtered = filtered.filter(s => 
+            !(parseFloat(s.total_items) === 0 && s.has_cleared === 1)
+        );
+        
+        return filtered;
+    }, [salesmen, searchTerm]);
 
     const fetchSalesmen = useCallback(async () => {
         setLoading(true);
@@ -103,7 +125,8 @@ export default function AccountManagement({ cacheKey }) {
         setViewMode('list');
         setSelectedSalesman(null);
         setEntries([]);
-    }, []);
+        fetchSalesmen(); // 👈 Refresh list when going back
+    }, [fetchSalesmen]);
 
     const handleDateFilter = useCallback(() => {
         if (selectedSalesman && fromDate && toDate) {
@@ -142,7 +165,17 @@ export default function AccountManagement({ cacheKey }) {
     }, [returnAmount]);
 
     const afterReturn = totals.totalItemAmount - returnValue;
-    const afterCommission = afterReturn - (parseFloat(commissionAmount) || 0);
+    
+    // 👈 CHANGED: Auto-calculate commission as 1% of afterReturn if not manually entered
+    const commissionValue = useMemo(() => {
+        if (commissionAmount !== '') {
+            return parseFloat(commissionAmount) || 0;
+        }
+        // Auto-calculate 1% of afterReturn
+        return Math.round(afterReturn * 1) / 100;
+    }, [commissionAmount, afterReturn]);
+    
+    const afterCommission = afterReturn - commissionValue;
     const finalBalance = afterCommission - totals.totalSubmitAmount;
 
     const handleSaveSettlement = useCallback(async () => {
@@ -154,7 +187,7 @@ export default function AccountManagement({ cacheKey }) {
                 total_item_amount: totals.totalItemAmount,
                 return_amount: returnValue,
                 after_return: afterReturn,
-                commission_amount: parseFloat(commissionAmount) || 0,
+                commission_amount: commissionValue,
                 after_commission: afterCommission,
                 final_balance: finalBalance
             });
@@ -162,8 +195,7 @@ export default function AccountManagement({ cacheKey }) {
             if (result?.status) {
                 clearCache(cacheKey);
                 showToast('Settlement saved successfully!');
-                // Only refresh what changed - the current salesman's data
-                fetchSalesmen(); // Need this to update cleared status in list
+                fetchSalesmen();
                 if (fromDate && toDate) {
                     fetchSalesmanEntries(selectedSalesman.salesmanid, fromDate, toDate);
                 } else {
@@ -178,7 +210,7 @@ export default function AccountManagement({ cacheKey }) {
         } finally {
             setSaving(false);
         }
-    }, [selectedSalesman, totals.totalItemAmount, returnValue, afterReturn, commissionAmount, afterCommission, finalBalance, showToast, fetchSalesmen, fetchSalesmanEntries, fromDate, toDate]);
+    }, [selectedSalesman, totals.totalItemAmount, returnValue, afterReturn, commissionValue, afterCommission, finalBalance, showToast, fetchSalesmen, fetchSalesmanEntries, fromDate, toDate]);
 
     // ---------- RENDER SALESMAN LIST ----------
     const renderSalesmanList = () => {
@@ -190,61 +222,64 @@ export default function AccountManagement({ cacheKey }) {
             );
         }
 
-        if (salesmen.length === 0) {
-            return (
-                <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-                    <p className="text-gray-500">No salesmen found</p>
-                </div>
-            );
-        }
-
         return (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">S.No</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Salesman Name</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Mobile</th>
-                                <th className="px-6 py-3 text-right text-xs font-bold text-black uppercase tracking-wider">Item Total</th>
-                                <th className="px-6 py-3 text-right text-xs font-bold text-black uppercase tracking-wider">Total Submit</th>
-                                <th className="px-6 py-3 text-center text-xs font-bold text-black uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-3 text-center text-xs font-bold text-black uppercase tracking-wider">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {salesmen.map((salesman, index) => (
-                                <tr key={salesman.salesmanid} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{salesman.fullname}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{salesman.mobileno}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-600 text-right">
-                                        ₹{parseFloat(salesman.total_items || 0).toFixed(0)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600 text-right">
-                                        ₹{parseFloat(salesman.total_submit || 0).toFixed(0)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                                        {salesman.has_cleared ? (
-                                            <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full">Cleared</span>
-                                        ) : (
-                                            <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded-full">Pending</span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                                        <button
-                                            onClick={() => handleSalesmanClick(salesman)}
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm cursor-pointer"
-                                        >
-                                            View Details
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            <div>
+                {/* 👈 NEW: Search Bar */}
+                <div className="mb-4">
+                    <input
+                        type="text"
+                        placeholder="Search salesman by name or mobile..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                 </div>
+
+                {filteredSalesmen.length === 0 ? (
+                    <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+                        <p className="text-gray-500">{searchTerm ? 'No salesmen match your search' : 'No pending accounts found'}</p>
+                    </div>
+                ) : (
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">S.No</th>
+                                        <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Salesman Name</th>
+                                        <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Mobile</th>
+                                        <th className="px-6 py-3 text-right text-xs font-bold text-black uppercase tracking-wider">Item Total</th>
+                                        <th className="px-6 py-3 text-right text-xs font-bold text-black uppercase tracking-wider">Total Submit</th>
+                                        <th className="px-6 py-3 text-center text-xs font-bold text-black uppercase tracking-wider">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {filteredSalesmen.map((salesman, index) => (
+                                        <tr key={salesman.salesmanid} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{salesman.fullname}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{salesman.mobileno}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-600 text-right">
+                                                ₹{parseFloat(salesman.total_items || 0).toFixed(0)}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600 text-right">
+                                                ₹{parseFloat(salesman.total_submit || 0).toFixed(0)}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                                                <button
+                                                    onClick={() => handleSalesmanClick(salesman)}
+                                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm cursor-pointer"
+                                                >
+                                                    View Details
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     };
@@ -379,12 +414,12 @@ export default function AccountManagement({ cacheKey }) {
                         </div>
 
                         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                            <span className="text-sm font-medium text-gray-700">4. Commission Amount</span>
+                            <span className="text-sm font-medium text-gray-700">4. Commission (1% auto)</span>
                             <input
                                 type="text" inputMode='numeric'
                                 value={commissionAmount}
                                 onChange={(e) => setCommissionAmount(e.target.value)}
-                                placeholder="Enter commission"
+                                placeholder={Math.round(afterReturn * 1 / 100).toString()}
                                 className="w-40 px-3 py-2 border border-gray-300 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
