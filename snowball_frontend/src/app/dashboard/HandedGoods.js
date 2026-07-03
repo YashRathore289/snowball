@@ -376,22 +376,19 @@ export default function HandedGoodsManagement({ cacheKey }) {
     return Math.round((total - commissionVal) * 100) / 100;
   }, [getReturnValue]);
 
-  // ---------- 👈 NEW: bill/receipt generation (no library, pure HTML + browser print) ----------
+  // ---------- bill/receipt generation ----------
   const generateBillHTML = useCallback((card, recordDate) => {
     const items = card.rows.filter(r => (r.isAllBig ? r.allBigExpr && r.allBigExpr.trim() : (r.productid && r.qty && r.price)));
 
     const itemsTotal = cardItemsTotal(card);
-    const returnVal = getReturnValue(card) || 0;
-    const commissionVal = parseFloat(card.commission) || 0;
-    const finalAmt = getFinalAmountForDB(card);
 
     const rowsHtml = items.map(r => {
       let qty, desc, price, total;
       if (r.isAllBig) {
         const evaluated = evaluateExpression(r.allBigExpr) || 0;
-        qty = '-';
+        qty = evaluated.toFixed(0);
         desc = 'All Big';
-        price = '-';
+        price = 10;
         total = (evaluated * 10).toFixed(0);
       } else {
         qty = String(r.qty);
@@ -459,15 +456,11 @@ export default function HandedGoodsManagement({ cacheKey }) {
     </tbody>
   </table>
   <hr />
-  <div class="totals-row"><span>Items Total</span><span>Rs ${itemsTotal.toFixed(0)}</span></div>
-  <div class="totals-row"><span>Return</span><span>Rs ${returnVal.toFixed(0)}</span></div>
-  <div class="totals-row"><span>Commission</span><span>Rs ${commissionVal.toFixed(0)}</span></div>
-  <hr />
-  <div class="totals-row final"><span>TOTAL</span><span>Rs ${finalAmt.toFixed(0)}</span></div>
+  <div class="totals-row final"><span>TOTAL</span><span>Rs ${itemsTotal.toFixed(0)}</span></div>
   <p class="thankyou">* THANK YOU *</p>
 </body>
 </html>`;
-  }, [date, getReturnValue, getFinalAmountForDB]);
+  }, [date]);
 
   const handleOpenBill = useCallback((card, recordDate) => {
     const html = generateBillHTML(card, recordDate);
@@ -491,38 +484,15 @@ export default function HandedGoodsManagement({ cacheKey }) {
     win.document.open();
     win.document.write(html);
     win.document.close();
-    // Trigger browser print dialog once content loads — user picks "Save as PDF"
     win.onload = () => {
       win.focus();
       win.print();
     };
-    // Fallback in case onload doesn't fire (already-loaded doc)
     setTimeout(() => {
       win.focus();
       win.print();
     }, 300);
   }, [generateBillHTML, showToast]);
-
-  // 👈 NEW: Generate a card-like object from a record for bill generation
-  const createCardFromRecord = useCallback((record) => {
-    return {
-      cardid: `record-${record.handedgoodsid}`,
-      salesmanName: record.salesman_name || '',
-      rows: (record.details?.items || []).map(item => ({
-        rowid: `rec-row-${Math.random().toString(36).slice(2, 7)}`,
-        productid: item.productid || '',
-        productname: item.productname || '',
-        qty: item.qty || '',
-        price: item.price || '',
-        isAllBig: item.isAllBig || false,
-        allBigExpr: item.allBigExpr || '',
-      })),
-      returnExpr: String(record.returnamt || ''),
-      commission: String(record.commission || ''),
-      cardDate: record.date,
-    };
-  }, []);
-  // ---------- end NEW ----------
 
   // ---------- save ----------
   const handleSave = useCallback(async (card, isEdit = false) => {
@@ -613,10 +583,6 @@ export default function HandedGoodsManagement({ cacheKey }) {
 
         await fetchAssignedBatteries();
         if (showRecords) await fetchRecords();
-
-        if (isEdit) {
-          setTimeout(() => setEditCards([]), 1500);
-        }
       } else {
         showToast(result?.message || 'Failed to save record');
         updateCard(card.cardid, { saving: false }, isEdit);
@@ -888,7 +854,6 @@ export default function HandedGoodsManagement({ cacheKey }) {
                 {card.saving ? 'Saving...' : card.saved ? '✓ Saved' : (card.editMode || card.isUpdateMode || card.handedgoodsid) ? 'Update Record' : 'Save Record'}
               </button>
 
-              {/* 👈 NEW: Bill buttons, only shown once the record is saved */}
               {card.saved && (
                 <>
                   <button onClick={() => handleOpenBill(card)}
@@ -988,7 +953,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
         </table>
       </div>
     );
-  }, [loadingRecords, recordSearch, records, filterType, handleEditRecord, handleDeleteRecord, createCardFromRecord, handleDownloadBill]);
+  }, [loadingRecords, recordSearch, records, filterType, handleEditRecord, handleDeleteRecord, handleDownloadBill]);
 
   // ---------- main return ----------
   return (
