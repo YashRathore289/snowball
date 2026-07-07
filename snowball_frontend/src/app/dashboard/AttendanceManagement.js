@@ -150,8 +150,8 @@ export default function AttendanceManagement({ cacheKey }) {
     const filteredSalesmen = useMemo(() => {
         if (!searchTerm.trim()) return salesmen;
         const term = searchTerm.toLowerCase();
-        return salesmen.filter(s => 
-            s.fullname?.toLowerCase().includes(term) || 
+        return salesmen.filter(s =>
+            s.fullname?.toLowerCase().includes(term) ||
             s.mobileno?.includes(term)
         );
     }, [salesmen, searchTerm]);
@@ -240,13 +240,13 @@ export default function AttendanceManagement({ cacheKey }) {
 
             <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
                 <div className="flex items-center gap-4">
-                    <div>
+                    <div className="flex items-center gap-2">
                         <label className="text-sm font-bold text-black">Date</label>
                         <input
                             type="date"
                             value={selectedDate}
                             onChange={(e) => setSelectedDate(e.target.value)}
-                            className="ml-2 px-3 py-2 border border-gray-300 rounded-lg font-bold text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            className="px-3 py-2 border border-gray-300 rounded-lg font-bold text-black focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                         />
                     </div>
                     <div className="text-sm font-bold text-black">
@@ -260,6 +260,26 @@ export default function AttendanceManagement({ cacheKey }) {
                 </div>
 
                 <div className="flex gap-2 items-center">
+                    <button
+                        onClick={() => {
+                            const prevDate = new Date(selectedDate);
+                            prevDate.setDate(prevDate.getDate() - 1);
+                            setSelectedDate(prevDate.toISOString().split('T')[0]);
+                        }}
+                        className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors cursor-pointer"
+                    >
+                        ◀
+                    </button>
+                    <button
+                        onClick={() => {
+                            const nextDate = new Date(selectedDate);
+                            nextDate.setDate(nextDate.getDate() + 1);
+                            setSelectedDate(nextDate.toISOString().split('T')[0]);
+                        }}
+                        className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors cursor-pointer"
+                    >
+                        ▶
+                    </button>
                     {/* Search Bar */}
                     <input
                         type="text"
@@ -397,9 +417,9 @@ export default function AttendanceManagement({ cacheKey }) {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-white">
                             <tr>
-                                <th className="px-3 py-2 text-left text-md font-bold text-black uppercase tracking-wider">Salesman</th>
+                                <th className="px-3 py-2 text-left text-md font-bold text-black uppercase tracking-wider border-r border-gray-300">Salesman</th>
                                 {Array.from({ length: daysInMonth }).map((_, index) => (
-                                    <th key={index} className="px-2 py-2 text-center text-md font-bold text-black">
+                                    <th key={index} className="px-2 py-2 text-center text-md font-bold text-black border-r border-gray-300">
                                         {index + 1}
                                     </th>
                                 ))}
@@ -408,7 +428,7 @@ export default function AttendanceManagement({ cacheKey }) {
                         <tbody className="bg-white divide-y divide-gray-200">
                             {salesmen.map(salesman => (
                                 <tr key={salesman.salesmanid} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-3 py-2 text-sm font-medium text-gray-900 whitespace-nowrap">
+                                    <td className="px-3 py-2 text-sm font-medium text-gray-900 whitespace-nowrap border-r border-gray-300">
                                         {salesman.fullname}
                                     </td>
                                     {Array.from({ length: daysInMonth }).map((_, dayIndex) => {
@@ -422,7 +442,7 @@ export default function AttendanceManagement({ cacheKey }) {
                                             currentYear === new Date().getFullYear();
 
                                         return (
-                                            <td key={day} className={`px-1 py-2 text-center font-bold text-xs ${isToday ? 'bg-blue-50' : ''}`}>
+                                            <td key={day} className={`px-1 py-2 text-center font-bold text-xs border-r border-gray-200 ${isToday ? 'bg-blue-50' : ''}`} title={dateStr}>
                                                 {status && (
                                                     <span className={`inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full ${getStatusBadge(status)}`}>
                                                         {status === 'Present' ? 'P' : 'A'}

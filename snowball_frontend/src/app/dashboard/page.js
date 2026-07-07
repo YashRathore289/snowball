@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import DebtManagement from './DebtManagement';
 import SalesmanDetails from './SalesmanDetail';
 import ProductManagement from './ProductManagement';
@@ -40,6 +40,30 @@ const menuItems = [
     { id: 'shop-goods', label: 'Shop Goods', icon: Truck },
     { id: 'account', label: 'Salesman Account', icon: Calculator },
 ];
+
+// Separate clock component to isolate re-renders
+function Clock() {
+    const [time, setTime] = useState(new Date());
+    const timerRef = useRef(null);
+
+    useEffect(() => {
+        timerRef.current = setInterval(() => {
+            setTime(new Date());
+        }, 1000);
+        return () => clearInterval(timerRef.current);
+    }, []);
+
+    return (
+        <div className="text-center">
+            <p className="text-sm font-semibold text-gray-700">
+                {time.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
+            <p className="text-sm font-semibold text-gray-700">
+                {time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </p>
+        </div>
+    );
+}
 
 export default function Dashboard() {
     const [activeTab, setActiveTab] = useState('home');
@@ -133,6 +157,7 @@ export default function Dashboard() {
             <div className="flex-1 overflow-y-auto">
                 <header className="bg-white border-b border-gray-200 p-4 flex justify-between items-center sticky top-0 z-10">
                     <h1 className="text-xl font-semibold text-gray-900">{activeLabel}</h1>
+                    <Clock />
                     <div className="flex items-center space-x-3">
                         <Calculators />
                         <button onClick={() => { sessionStorage.removeItem('user'); window.location.href = '/login' }} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 cursor-pointer">

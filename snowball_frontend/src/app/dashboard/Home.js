@@ -58,7 +58,7 @@ export default function HomeComponent() {
                 {/* Welcome Text */}
                 <h1 className="text-5xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 mb-4 text-center"
                     style={{ backgroundSize: '200% auto', animation: 'gradient 3s ease infinite' }}>
-                    Welcome back, {user?.username || 'Admin'}!
+                    Welcome Back, {user?.username || 'Admin'}!
                 </h1>
 
                 {/* Subtitle */}
@@ -71,16 +71,6 @@ export default function HomeComponent() {
                     <div className="h-px w-16 bg-gradient-to-r from-transparent to-blue-300"></div>
                     <div className="w-3 h-3 bg-blue-400 rounded-full animate-ping"></div>
                     <div className="h-px w-16 bg-gradient-to-l from-transparent to-blue-300"></div>
-                </div>
-
-                {/* Date */}
-                <div className={`text-center transition-all duration-700 delay-1000 ${showContent ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}>
-                    <p className="text-3xl font-bold text-blue-600 animate-pulse" style={{ animationDuration: '3s' }}>
-                        {new Date().toLocaleDateString('en-US', { weekday: 'long' })}
-                    </p>
-                    <p className="text-sm text-gray-400 mt-1">
-                        {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                    </p>
                 </div>
 
                 {/* Loading dots */}

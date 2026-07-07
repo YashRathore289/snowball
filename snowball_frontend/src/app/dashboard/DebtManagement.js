@@ -281,32 +281,6 @@ export default function DebtManagement({ cacheKey }) {
           <div className="p-6">
             <div className="space-y-4">
               <div className="space-y-1">
-                <label className="text-sm font-medium text-gray-700">Type</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, type: 'give' }))}
-                    className={`px-4 py-2 rounded-lg border-2 transition-all cursor-pointer ${formData.type === 'give'
-                      ? 'border-red-600 bg-red-50 text-red-700'
-                      : 'border-gray-300 hover:border-gray-400'
-                      }`}
-                  >
-                    Give Debt
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, type: 'receive' }))}
-                    className={`px-4 py-2 rounded-lg border-2 transition-all cursor-pointer ${formData.type === 'receive'
-                      ? 'border-green-600 bg-green-50 text-green-700'
-                      : 'border-gray-300 hover:border-gray-400'
-                      }`}
-                  >
-                    Receive Debt
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-1">
                 <label className="text-sm font-medium text-gray-700">Amount (₹)</label>
                 <input
                   type="number"
@@ -317,6 +291,7 @@ export default function DebtManagement({ cacheKey }) {
                   placeholder="Enter amount"
                   step="0.01"
                   min="0"
+                  autoFocus
                 />
               </div>
 

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { postData } from '@/Services';
 import { saveCache, getCache, clearCache } from './ComponentCache';
 
@@ -77,6 +77,7 @@ export default function SalesmanDetails({ cacheKey }) {
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [formErrors, setFormErrors] = useState({});
+    const [searchTerm, setSearchTerm] = useState('');
 
     const [imageFiles, setImageFiles] = useState({
         photo: null, idproof: null, salesmansignature: null, ownersignature: null
@@ -155,7 +156,6 @@ export default function SalesmanDetails({ cacheKey }) {
         setSelectedSalesman(salesman);
         setFormData({
             ...salesman,
-            // Ensure phone numbers always have +91 when displayed
             mobileno: salesman.mobileno ? (salesman.mobileno.startsWith('+91') ? salesman.mobileno : `+91 ${salesman.mobileno}`) : '',
             emergencymobileno: salesman.emergencymobileno ? (salesman.emergencymobileno.startsWith('+91') ? salesman.emergencymobileno : `+91 ${salesman.emergencymobileno}`) : '',
             whatsappno: salesman.whatsappno ? (salesman.whatsappno.startsWith('+91') ? salesman.whatsappno : `+91 ${salesman.whatsappno}`) : '',
@@ -181,23 +181,19 @@ export default function SalesmanDetails({ cacheKey }) {
     const handleInputChange = useCallback((e) => {
         const { name, value } = e.target;
 
-        // Auto-calculate age when DOB changes
         if (name === 'dob') {
             const age = calculateAge(value);
             setFormData(prev => ({ ...prev, dob: value, age: age }));
             return;
         }
 
-        // Format phone numbers with +91
         if (name === 'mobileno' || name === 'emergencymobileno' || name === 'whatsappno') {
             const formatted = formatPhoneNumber(value);
             setFormData(prev => ({ ...prev, [name]: formatted }));
-            // Clear error for this field
             setFormErrors(prev => ({ ...prev, [name]: '' }));
             return;
         }
 
-        // Aadhar validation
         if (name === 'aadharno') {
             const digits = value.replace(/\D/g, '').slice(0, 12);
             setFormData(prev => ({ ...prev, [name]: digits }));
@@ -281,9 +277,9 @@ export default function SalesmanDetails({ cacheKey }) {
                         setSelectedSalesman(updatedData);
                         setFormData({
                             ...updatedData,
-                            mobileno: updatedData.mobileno ? updatedData.mobileno.replace(/^\+91\s?/, '') : '',
-                            emergencymobileno: updatedData.emergencymobileno ? updatedData.emergencymobileno.replace(/^\+91\s?/, '') : '',
-                            whatsappno: updatedData.whatsappno ? updatedData.whatsappno.replace(/^\+91\s?/, '') : '',
+                            mobileno: updatedData.mobileno ? (updatedData.mobileno.startsWith('+91') ? updatedData.mobileno : `+91 ${updatedData.mobileno}`) : '',
+                            emergencymobileno: updatedData.emergencymobileno ? (updatedData.emergencymobileno.startsWith('+91') ? updatedData.emergencymobileno : `+91 ${updatedData.emergencymobileno}`) : '',
+                            whatsappno: updatedData.whatsappno ? (updatedData.whatsappno.startsWith('+91') ? updatedData.whatsappno : `+91 ${updatedData.whatsappno}`) : '',
                         });
                         setImagePreviews({
                             photo: updatedData.photo || null,
@@ -344,6 +340,17 @@ export default function SalesmanDetails({ cacheKey }) {
             ownersignature: selectedSalesman.ownersignature || null
         });
     }, [selectedSalesman]);
+
+    // Filter by name only
+    const filteredSalesmen = useMemo(() => {
+        if (!searchTerm.trim()) return salesmen;
+        
+        const term = searchTerm.toLowerCase().trim();
+        
+        return salesmen.filter(s => 
+            s.fullname?.toLowerCase().includes(term)
+        );
+    }, [salesmen, searchTerm]);
 
     // Render Modal
     const renderModal = useCallback(() => {
@@ -537,23 +544,45 @@ export default function SalesmanDetails({ cacheKey }) {
                 </div>
             );
         }
-        if (salesmen.length === 0) {
+        
+        if (filteredSalesmen.length === 0) {
             return (
                 <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-                    <p className="text-gray-500">No salesmen found</p>
+                    <p className="text-gray-500">
+                        {searchTerm ? `No salesmen found with name "${searchTerm}"` : 'No salesmen found'}
+                    </p>
+                    {searchTerm && (
+                        <button 
+                            onClick={() => setSearchTerm('')}
+                            className="mt-2 text-blue-600 hover:text-blue-800 underline"
+                        >
+                            Clear search
+                        </button>
+                    )}
                 </div>
             );
         }
+        
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-                {salesmen.map(salesman => (
-                    <div key={salesman.salesmanid} onClick={() => handleCardClick(salesman)} className="bg-white rounded-lg shadow-sm border border-gray-200 p-2 hover:shadow-md transition-all cursor-pointer hover:border-blue-400">
+                {filteredSalesmen.map(salesman => (
+                    <div 
+                        key={salesman.salesmanid} 
+                        onClick={() => handleCardClick(salesman)} 
+                        className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-all cursor-pointer hover:border-blue-400"
+                    >
                         <div className="flex flex-col items-center">
-                            <div className="w-30 h-30 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-3xl font-bold mb-3 overflow-hidden">
+                            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-3xl font-bold mb-3 overflow-hidden">
                                 {salesman.photo ? (
-                                    <img src={salesman.photo} alt={salesman.fullname} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'; }} />
-                                ) : salesman.idproof ? (
-                                    <img src={salesman.idproof} alt={salesman.fullname} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'; }} />
+                                    <img 
+                                        src={salesman.photo} 
+                                        alt={salesman.fullname} 
+                                        className="w-full h-full object-cover" 
+                                        onError={(e) => { 
+                                            e.target.style.display = 'none'; 
+                                            e.target.parentElement.innerHTML = salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'; 
+                                        }} 
+                                    />
                                 ) : (
                                     salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'
                                 )}
@@ -564,7 +593,7 @@ export default function SalesmanDetails({ cacheKey }) {
                 ))}
             </div>
         );
-    }, [salesmen, loading, handleCardClick]);
+    }, [filteredSalesmen, loading, handleCardClick, searchTerm]);
 
     return (
         <div>
@@ -574,6 +603,7 @@ export default function SalesmanDetails({ cacheKey }) {
                     <button onClick={() => setToastVisible(false)} className="text-white hover:text-gray-200 font-bold text-lg leading-none cursor-pointer">×</button>
                 </div>
             )}
+            
             {confirmVisible && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
                     <div className="bg-white rounded-xl shadow-2xl p-6 w-96 max-w-[90%]">
@@ -586,18 +616,50 @@ export default function SalesmanDetails({ cacheKey }) {
                     </div>
                 </div>
             )}
-            <div className="mb-8 flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-semibold text-gray-900">Salesman Details</h2>
-                    <p className="text-sm text-gray-500 mt-1">Manage and view all salesman information</p>
+            
+            <div className="mb-8">
+                <div className="flex justify-between items-center mb-4">
+                    <div>
+                        <h2 className="text-2xl font-semibold text-gray-900">Salesman Details</h2>
+                        <p className="text-sm text-gray-500 mt-1">Manage and view all salesman information</p>
+                    </div>
+                    <button 
+                        onClick={handleAddClick} 
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        Add Salesman
+                    </button>
                 </div>
-                <button onClick={handleAddClick} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 cursor-pointer">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Add Salesman
-                </button>
+                
+                <div className="mb-4">
+                    <div className="relative">
+                        <input
+                            type="text"
+                            placeholder="Search by name..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        />
+                        <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm('')}
+                                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 cursor-pointer"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+                </div>
             </div>
+            
             {renderSalesmanCards()}
             {renderModal()}
         </div>

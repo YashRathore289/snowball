@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { postData } from '@/Services';
 import { saveCache, getCache, clearCache } from './ComponentCache';
-import { Calendar, Pencil, Trash2, Filter, X, Eye } from 'lucide-react';
+import { Calendar, Pencil, Trash2, Filter, X, Eye, FileText, Download } from 'lucide-react';
 
 export default function CompanyProductManagement({ cacheKey }) {
   const cachedData = cacheKey ? getCache(cacheKey) : null;
@@ -13,7 +13,7 @@ export default function CompanyProductManagement({ cacheKey }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isAddMode, setIsAddMode] = useState(false);
-  const [isViewMode, setIsViewMode] = useState(false); // 👈 NEW
+  const [isViewMode, setIsViewMode] = useState(false);
   const [formData, setFormData] = useState({
     companyproductid: '',
     entry_date: new Date().toISOString().split('T')[0]
@@ -23,7 +23,7 @@ export default function CompanyProductManagement({ cacheKey }) {
   // Filter states
   const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
-  const [selectedDate, setSelectedDate] = useState(''); // 👈 NEW: date filter
+  const [selectedDate, setSelectedDate] = useState('');
   const [isFiltered, setIsFiltered] = useState(false);
 
   const currentYear = new Date().getFullYear();
@@ -92,7 +92,6 @@ export default function CompanyProductManagement({ cacheKey }) {
     return () => { if (cacheKey) saveCache(cacheKey, { products, iceCreams }); };
   }, [cacheKey, products, iceCreams]);
 
-  // 👈 UPDATED: Handle filter apply with date
   const handleApplyFilter = useCallback(() => {
     const hasFilter = !!(selectedMonth || selectedYear || selectedDate);
     setIsFiltered(hasFilter);
@@ -104,12 +103,11 @@ export default function CompanyProductManagement({ cacheKey }) {
   }, [selectedMonth, selectedYear, selectedDate, fetchProducts]);
 
   const handleClearFilter = useCallback(() => {
-    setSelectedMonth(''); setSelectedYear(''); setSelectedDate(''); // 👈 clear date too
+    setSelectedMonth(''); setSelectedYear(''); setSelectedDate('');
     setIsFiltered(false);
     fetchProducts('', '');
   }, [fetchProducts]);
 
-  // 👈 NEW: Filter products by date on frontend
   const filteredProducts = useMemo(() => {
     if (!selectedDate) return products;
     return products.filter(p => p.entry_date?.startsWith(selectedDate));
@@ -131,7 +129,6 @@ export default function CompanyProductManagement({ cacheKey }) {
     return { totalProducts: products.length, totalOrdered, totalDelivered, totalRemaining: totalOrdered - totalDelivered, totalOrderedAmount, totalDeliveredAmount };
   }, [products]);
 
-  // 👈 NEW: View handler
   const handleViewClick = useCallback((product) => {
     setSelectedProduct(product);
     setIsViewMode(true);
@@ -143,7 +140,7 @@ export default function CompanyProductManagement({ cacheKey }) {
   const handleAddClick = useCallback(() => {
     setFormData({ companyproductid: '', entry_date: new Date().toISOString().split('T')[0] });
     setEntries([{ IceCream: '', Type: '', OrderedQty: '', OrderedAmount: '', DeliveredQty: '', DeliveredAmount: '' }]);
-    setIsAddMode(true); setIsEditMode(false); setIsViewMode(false); // 👈 reset view mode
+    setIsAddMode(true); setIsEditMode(false); setIsViewMode(false);
     setSelectedProduct(null); setIsModalOpen(true);
   }, []);
 
@@ -159,7 +156,7 @@ export default function CompanyProductManagement({ cacheKey }) {
       OrderedQty: item.OrderedQty || item.qty || '', OrderedAmount: item.OrderedAmount || item.total || '',
       DeliveredQty: item.DeliveredQty || '', DeliveredAmount: item.DeliveredAmount || ''
     })));
-    setIsEditMode(true); setIsAddMode(false); setIsViewMode(false); // 👈 reset view mode
+    setIsEditMode(true); setIsAddMode(false); setIsViewMode(false);
     setIsModalOpen(true);
   }, []);
 
@@ -221,6 +218,126 @@ export default function CompanyProductManagement({ cacheKey }) {
     } catch (error) { console.error('Error saving product:', error); showToast('Error saving product'); }
   }, [entries, isAddMode, formData, fetchProducts, showToast, cacheKey, isFiltered, selectedMonth, selectedYear]);
 
+  // 👈 NEW: Generate bill HTML
+  const generateBillHTML = useCallback((product) => {
+    const details = product.details;
+    let items = Array.isArray(details) ? details : (details?.items || []);
+    
+    const rowsHtml = items.map(item => {
+      const ordered = parseFloat(item.OrderedQty || item.qty) || 0;
+      const delivered = parseFloat(item.DeliveredQty) || 0;
+      const orderedAmt = parseFloat(item.OrderedAmount || item.total) || 0;
+      const deliveredAmt = parseFloat(item.DeliveredAmount) || 0;
+      const remaining = ordered - delivered;
+      
+      return `
+        <tr>
+          <td>${item.IceCream || item.productname || ''}</td>
+          <td>${item.Type || '-'}</td>
+          <td class="num">${ordered}</td>
+          <td class="num">₹${orderedAmt.toFixed(0)}</td>
+          <td class="num">${delivered}</td>
+          <td class="num">₹${deliveredAmt.toFixed(0)}</td>
+          <td class="num">${remaining}</td>
+        </tr>`;
+    }).join('');
+
+    let totalOrdered = 0, totalDelivered = 0, totalOrderedAmt = 0, totalDeliveredAmt = 0;
+    items.forEach(item => {
+      totalOrdered += parseFloat(item.OrderedQty || item.qty) || 0;
+      totalDelivered += parseFloat(item.DeliveredQty) || 0;
+      totalOrderedAmt += parseFloat(item.OrderedAmount || item.total) || 0;
+      totalDeliveredAmt += parseFloat(item.DeliveredAmount) || 0;
+    });
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Company Product Bill - ${product.entry_date?.split('T')[0] || ''}</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    width: 400px;
+    margin: 20px auto;
+    color: #111;
+    background: #fff;
+  }
+  .center { text-align: center; }
+  h1 { font-size: 16px; margin: 0 0 2px; letter-spacing: 1px; }
+  .sub { font-size: 11px; margin: 0 0 8px; color: #444; }
+  hr { border: none; border-top: 1px dashed #999; margin: 6px 0; }
+  .meta { font-size: 11px; margin: 2px 0; display: flex; justify-content: space-between; }
+  table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 4px; }
+  th { text-align: left; font-size: 9px; border-bottom: 1px dashed #999; padding-bottom: 4px; }
+  td { padding: 3px 0; vertical-align: top; }
+  .num { text-align: right; white-space: nowrap; }
+  .totals-row { display: flex; justify-content: space-between; font-size: 12px; margin: 3px 0; }
+  .final { font-weight: bold; font-size: 13px; margin-top: 6px; }
+  .thankyou { text-align: center; margin-top: 14px; font-size: 12px; letter-spacing: 2px; }
+  @media print {
+    body { width: 80mm; margin: 0 auto; }
+  }
+</style>
+</head>
+<body style="border:0.01px solid #9b9b9b; padding:5px;">
+  <div class="center">
+    <h1>SNOW BALL ICE CREAM</h1>
+    <p class="sub">Company Product Receipt</p>
+  </div>
+  <hr />
+  <div class="meta"><span>Date</span><span>${product.entry_date?.split('T')[0] || ''}</span></div>
+  <div class="meta"><span>Time</span><span>${new Date().toLocaleTimeString()}</span></div>
+  <hr />
+  <table>
+    <thead>
+      <tr><th>PRODUCT</th><th>TYPE</th><th class="num">ORD</th><th class="num">ORD AMT</th><th class="num">DEL</th><th class="num">DEL AMT</th><th class="num">REM</th></tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+  <hr />
+  <div class="totals-row"><span>TOTAL ORDERED</span><span>${totalOrdered} pcs | ₹${totalOrderedAmt.toFixed(0)}</span></div>
+  <div class="totals-row"><span>TOTAL DELIVERED</span><span>${totalDelivered} pcs | ₹${totalDeliveredAmt.toFixed(0)}</span></div>
+  <div class="totals-row final"><span>REMAINING</span><span>${totalOrdered - totalDelivered} pcs</span></div>
+  <p class="thankyou">* THANK YOU *</p>
+</body>
+</html>`;
+  }, []);
+
+  // 👈 NEW: Open bill in new window
+  const handleOpenBill = useCallback((product) => {
+    const html = generateBillHTML(product);
+    const win = window.open('', '_blank');
+    if (!win) {
+      showToast('Please allow popups to view the bill');
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  }, [generateBillHTML, showToast]);
+
+  // 👈 NEW: Download/Print bill
+  const handleDownloadBill = useCallback((product) => {
+    const html = generateBillHTML(product);
+    const win = window.open('', '_blank');
+    if (!win) {
+      showToast('Please allow popups to download the bill');
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => {
+      win.focus();
+      win.print();
+    }, 300);
+  }, [generateBillHTML, showToast]);
+
   const renderDetails = useCallback((details) => {
     if (!details) return <span className="text-gray-400 italic text-xs">No items</span>;
     let items = Array.isArray(details) ? details : (details.items || []);
@@ -254,11 +371,9 @@ export default function CompanyProductManagement({ cacheKey }) {
     );
   }, []);
 
-  // 👈 UPDATED: Modal for view/edit/add
   const renderModal = () => {
     if (!isModalOpen) return null;
 
-    // View Mode
     if (isViewMode && selectedProduct) {
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2">
@@ -268,9 +383,20 @@ export default function CompanyProductManagement({ cacheKey }) {
                 <h2 className="text-xl font-semibold text-white">View Company Product</h2>
                 <p className="text-sm text-white/80">Date: {selectedProduct.entry_date?.split('T')[0]}</p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-white hover:text-gray-200 transition-colors cursor-pointer">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+              <div className="flex items-center gap-2">
+                {/* 👈 NEW: Bill buttons in view mode */}
+                <button onClick={() => handleOpenBill(selectedProduct)}
+                  className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors text-sm cursor-pointer flex items-center gap-1">
+                  <FileText className="w-4 h-4" /> View Bill
+                </button>
+                <button onClick={() => handleDownloadBill(selectedProduct)}
+                  className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors text-sm cursor-pointer flex items-center gap-1">
+                  <Download className="w-4 h-4" /> Download
+                </button>
+                <button onClick={() => setIsModalOpen(false)} className="text-white hover:text-gray-200 transition-colors cursor-pointer">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
             </div>
             <div className="overflow-y-auto p-6 max-h-[calc(90vh-120px)]">
               {renderDetails(selectedProduct.details)}
@@ -280,7 +406,6 @@ export default function CompanyProductManagement({ cacheKey }) {
       );
     }
 
-    // Add/Edit Mode
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-[95%] max-h-[90vh] overflow-hidden">
@@ -335,7 +460,6 @@ export default function CompanyProductManagement({ cacheKey }) {
     );
   };
 
-  // 👈 UPDATED: Filter with date
   const renderFilter = () => (
     <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
       <div className="flex items-center gap-3 flex-wrap">
@@ -351,7 +475,6 @@ export default function CompanyProductManagement({ cacheKey }) {
           <option value="">All Years</option>
           {yearRange.map((year) => (<option key={year} value={year}>{year}</option>))}
         </select>
-        {/* 👈 NEW: Date filter */}
         <input type="date" value={selectedDate} onChange={(e) => { setSelectedDate(e.target.value); setIsFiltered(true); }}
           className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer" />
         <button onClick={handleApplyFilter}
@@ -380,7 +503,6 @@ export default function CompanyProductManagement({ cacheKey }) {
       return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>;
     }
 
-    // 👈 Use filteredProducts instead of products
     const displayProducts = selectedDate ? filteredProducts : products;
 
     if (displayProducts.length === 0) {
@@ -395,9 +517,7 @@ export default function CompanyProductManagement({ cacheKey }) {
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">S.No</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
-                {/* 👈 NEW: Order Amount column */}
                 <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Order Amt</th>
-                {/* 👈 NEW: Delivered Amount column */}
                 <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Delivered Amt</th>
                 <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
               </tr>
@@ -421,16 +541,18 @@ export default function CompanyProductManagement({ cacheKey }) {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                       <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-gray-400" />{product.entry_date ? product.entry_date.split('T')[0] : '-'}</div>
                     </td>
-                    {/* 👈 NEW: Order Amount */}
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-600 text-right">₹{totalOrderedAmt.toFixed(0)}</td>
-                    {/* 👈 NEW: Delivered Amount */}
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600 text-right">₹{totalDeliveredAmt.toFixed(0)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-2">
-                        {/* 👈 NEW: View button */}
                         <button onClick={() => handleViewClick(product)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-medium rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer">
                           <Eye className="w-3.5 h-3.5" /> View
+                        </button>
+                        {/* 👈 NEW: Bill button in table */}
+                        <button onClick={() => handleDownloadBill(product)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer">
+                          <FileText className="w-3.5 h-3.5" /> Bill
                         </button>
                         <button onClick={() => handleEditClick(product)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer">

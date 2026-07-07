@@ -360,6 +360,8 @@ export default function HandedGoodsManagement({ cacheKey }) {
   const getReturnValue = useCallback((card) => evaluateExpression(card.returnExpr), []);
 
   const getFinalAmount = useCallback((card) => {
+    if (card.editMode) return null;
+
     const itemsTotal = cardItemsTotal(card);
     const returnVal = getReturnValue(card) || 0;
     const commissionVal = parseFloat(card.commission) || 0;
@@ -614,7 +616,8 @@ export default function HandedGoodsManagement({ cacheKey }) {
     newCardData.returnExpr = String(record.returnamt || '');
     newCardData.commission = String(record.commission || '');
     newCardData.clearStatus = record.clear_status === 1;
-    newCardData.submitAmount = String(record.submit_amount || '');
+    // Don't auto-fill submit amount in edit mode - leave it empty
+    newCardData.submitAmount = '';
     newCardData.editMode = true;
     newCardData.handedgoodsid = record.handedgoodsid;
     newCardData.cardDate = record.date;
