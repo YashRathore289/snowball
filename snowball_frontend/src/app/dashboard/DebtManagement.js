@@ -21,6 +21,7 @@ export default function DebtManagement({ cacheKey }) {
     debt_date: new Date().toISOString().split('T')[0]
   });
   const [salesmanDebtSummary, setSalesmanDebtSummary] = useState(cachedData?.salesmanDebtSummary || {});
+  const [searchTerm, setSearchTerm] = useState(''); // 👈 NEW
 
   // Toast & Confirmation popup states
   const [toastMessage, setToastMessage] = useState('');
@@ -77,6 +78,16 @@ export default function DebtManagement({ cacheKey }) {
       remaining: totalGiven - totalReceived,
     };
   }, [debts]);
+
+  // 👈 NEW: Filtered salesmen based on search
+  const filteredSalesmen = useMemo(() => {
+    if (!searchTerm.trim()) return salesmen;
+    const term = searchTerm.toLowerCase();
+    return salesmen.filter(s => 
+      s.fullname?.toLowerCase().includes(term) || 
+      s.mobileno?.includes(term)
+    );
+  }, [salesmen, searchTerm]);
 
   // Fetch all salesmen with their debt summary
   const fetchSalesmen = useCallback(async () => {
@@ -365,6 +376,37 @@ export default function DebtManagement({ cacheKey }) {
           </div>
         </div>
 
+        {/* 👈 NEW: Search Bar */}
+        <div className="mb-4">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search by name or mobile number..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full max-w-md px-4 py-2 pl-10 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {searchTerm && (
+            <p className="text-xs text-gray-500 mt-1">
+              Found {filteredSalesmen.length} result{filteredSalesmen.length !== 1 ? 's' : ''}
+            </p>
+          )}
+        </div>
+
         {/* Salesman Table */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
@@ -381,36 +423,44 @@ export default function DebtManagement({ cacheKey }) {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {salesmen.map((salesman, index) => {
-                  const sum = salesmanDebtSummary[salesman.salesmanid] || { totalGiven: 0, totalReceived: 0, remaining: 0, hasDebt: false };
-                  return (
-                    <tr key={salesman.salesmanid} className={`hover:bg-gray-50 transition-colors ${sum.hasDebt ? 'bg-blue-50/30' : ''}`}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{salesman.fullname}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{salesman.mobileno}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-red-600">
-                        ₹{sum.totalGiven.toFixed(0)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
-                        ₹{sum.totalReceived.toFixed(0)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                        <span className={sum.remaining >= 0 ? 'text-blue-600' : 'text-orange-600'}>
-                          ₹{Math.abs(sum.remaining).toFixed(0)}
-                          {sum.remaining < 0 && ' (Extra)'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => handleSalesmanClick(salesman)}
-                          className={`px-4 py-2 ${sum.hasDebt ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg transition-colors text-sm cursor-pointer`}
-                        >
-                          {sum.hasDebt ? 'View Details' : 'Add Debt'}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {filteredSalesmen.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-4 text-center text-sm text-gray-500">
+                      {searchTerm ? 'No salesmen match your search' : 'No salesmen found'}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredSalesmen.map((salesman, index) => {
+                    const sum = salesmanDebtSummary[salesman.salesmanid] || { totalGiven: 0, totalReceived: 0, remaining: 0, hasDebt: false };
+                    return (
+                      <tr key={salesman.salesmanid} className={`hover:bg-gray-50 transition-colors ${sum.hasDebt ? 'bg-blue-50/30' : ''}`}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{salesman.fullname}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{salesman.mobileno}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-red-600">
+                          ₹{sum.totalGiven.toFixed(0)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
+                          ₹{sum.totalReceived.toFixed(0)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
+                          <span className={sum.remaining >= 0 ? 'text-blue-600' : 'text-orange-600'}>
+                            ₹{Math.abs(sum.remaining).toFixed(0)}
+                            {sum.remaining < 0 && ' (Extra)'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <button
+                            onClick={() => handleSalesmanClick(salesman)}
+                            className={`px-4 py-2 ${sum.hasDebt ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg transition-colors text-sm cursor-pointer`}
+                          >
+                            {sum.hasDebt ? 'View Details' : 'Add Debt'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>

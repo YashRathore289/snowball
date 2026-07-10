@@ -222,23 +222,17 @@ export default function CompanyProductManagement({ cacheKey }) {
   const generateBillHTML = useCallback((product) => {
     const details = product.details;
     let items = Array.isArray(details) ? details : (details?.items || []);
-    
+
     const rowsHtml = items.map(item => {
       const ordered = parseFloat(item.OrderedQty || item.qty) || 0;
       const delivered = parseFloat(item.DeliveredQty) || 0;
-      const orderedAmt = parseFloat(item.OrderedAmount || item.total) || 0;
-      const deliveredAmt = parseFloat(item.DeliveredAmount) || 0;
-      const remaining = ordered - delivered;
-      
+
       return `
         <tr>
           <td>${item.IceCream || item.productname || ''}</td>
           <td>${item.Type || '-'}</td>
           <td class="num">${ordered}</td>
-          <td class="num">₹${orderedAmt.toFixed(0)}</td>
           <td class="num">${delivered}</td>
-          <td class="num">₹${deliveredAmt.toFixed(0)}</td>
-          <td class="num">${remaining}</td>
         </tr>`;
     }).join('');
 
@@ -260,7 +254,7 @@ export default function CompanyProductManagement({ cacheKey }) {
   * { box-sizing: border-box; }
   body {
     font-family: 'Courier New', Courier, monospace;
-    width: 400px;
+    width: 380px;
     margin: 20px auto;
     color: #111;
     background: #fff;
@@ -271,8 +265,8 @@ export default function CompanyProductManagement({ cacheKey }) {
   hr { border: none; border-top: 1px dashed #999; margin: 6px 0; }
   .meta { font-size: 11px; margin: 2px 0; display: flex; justify-content: space-between; }
   table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 4px; }
-  th { text-align: left; font-size: 9px; border-bottom: 1px dashed #999; padding-bottom: 4px; }
-  td { padding: 3px 0; vertical-align: top; }
+  th { text-align: left; font-size: 9px; border-bottom: 1px dashed #999; padding-bottom: 4px; padding-left: 4px; padding-right: 4px; }
+  td { padding: 3px 4px; vertical-align: top; }
   .num { text-align: right; white-space: nowrap; }
   .totals-row { display: flex; justify-content: space-between; font-size: 12px; margin: 3px 0; }
   .final { font-weight: bold; font-size: 13px; margin-top: 6px; }
@@ -293,16 +287,20 @@ export default function CompanyProductManagement({ cacheKey }) {
   <hr />
   <table>
     <thead>
-      <tr><th>PRODUCT</th><th>TYPE</th><th class="num">ORD</th><th class="num">ORD AMT</th><th class="num">DEL</th><th class="num">DEL AMT</th><th class="num">REM</th></tr>
+      <tr>
+        <th>PRODUCT</th>
+        <th>TYPE</th>
+        <th class="num">ORD</th>
+        <th class="num">DEL</th>
+      </tr>
     </thead>
     <tbody>
       ${rowsHtml}
     </tbody>
   </table>
   <hr />
-  <div class="totals-row"><span>TOTAL ORDERED</span><span>${totalOrdered} pcs | ₹${totalOrderedAmt.toFixed(0)}</span></div>
-  <div class="totals-row"><span>TOTAL DELIVERED</span><span>${totalDelivered} pcs | ₹${totalDeliveredAmt.toFixed(0)}</span></div>
-  <div class="totals-row final"><span>REMAINING</span><span>${totalOrdered - totalDelivered} pcs</span></div>
+  <div class="totals-row"><span>TOTAL ORDERED</span><span><b>₹${totalOrderedAmt.toFixed(0)}</b></span></div>
+  <div class="totals-row"><span>TOTAL DELIVERED</span><span><b>₹${totalDeliveredAmt.toFixed(0)}</b></span></div>
   <p class="thankyou">* THANK YOU *</p>
 </body>
 </html>`;
@@ -548,11 +546,6 @@ export default function CompanyProductManagement({ cacheKey }) {
                         <button onClick={() => handleViewClick(product)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-medium rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer">
                           <Eye className="w-3.5 h-3.5" /> View
-                        </button>
-                        {/* 👈 NEW: Bill button in table */}
-                        <button onClick={() => handleDownloadBill(product)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer">
-                          <FileText className="w-3.5 h-3.5" /> Bill
                         </button>
                         <button onClick={() => handleEditClick(product)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg shadow-sm hover:shadow transition-all duration-150 cursor-pointer">

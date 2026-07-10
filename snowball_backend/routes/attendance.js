@@ -159,6 +159,114 @@ router.post("/delete-attendance", rateLimiter.critical(), async (req, res) => {
     }
 });
 
+// ==================== MARK ALL ABSENT ====================
+router.post("/mark-all-absent", rateLimiter.critical(), async (req, res) => {
+    try {
+        const { attendance_date, salesmanids } = req.body;
+
+        if (!attendance_date) {
+            return res.status(400).json({ status: false, message: "attendance_date is required" });
+        }
+
+        if (!salesmanids || !Array.isArray(salesmanids) || salesmanids.length === 0) {
+            return res.status(400).json({ status: false, message: "salesmanids array is required" });
+        }
+
+        // Use a transaction to ensure all operations complete or none
+        pool.getConnection((err, connection) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ status: false, message: "Database Connection Error" });
+            }
+
+            connection.beginTransaction(async (err) => {
+                if (err) {
+                    connection.release();
+                    console.error(err);
+                    return res.status(500).json({ status: false, message: "Transaction Error" });
+                }
+
+                try {
+                    let markedCount = 0;
+                    let skippedCount = 0;
+
+                    for (const salesmanid of salesmanids) {
+                        // Check if attendance already exists for this salesman on this date
+                        const checkResult = await new Promise((resolve, reject) => {
+                            connection.query(
+                                "SELECT * FROM salesman_attendance WHERE salesmanid = ? AND attendance_date = ?",
+                                [salesmanid, attendance_date],
+                                (err, result) => {
+                                    if (err) reject(err);
+                                    else resolve(result);
+                                }
+                            );
+                        });
+
+                        if (checkResult.length > 0) {
+                            // Update existing record to Absent
+                            await new Promise((resolve, reject) => {
+                                connection.query(
+                                    "UPDATE salesman_attendance SET status = 'Absent' WHERE attendanceid = ?",
+                                    [checkResult[0].attendanceid],
+                                    (err) => {
+                                        if (err) reject(err);
+                                        else resolve();
+                                    }
+                                );
+                            });
+                            markedCount++;
+                        } else {
+                            // Insert new Absent record
+                            await new Promise((resolve, reject) => {
+                                connection.query(
+                                    "INSERT INTO salesman_attendance (salesmanid, attendance_date, status) VALUES (?, ?, 'Absent')",
+                                    [salesmanid, attendance_date],
+                                    (err) => {
+                                        if (err) reject(err);
+                                        else resolve();
+                                    }
+                                );
+                            });
+                            markedCount++;
+                        }
+                    }
+
+                    connection.commit((err) => {
+                        if (err) {
+                            return connection.rollback(() => {
+                                connection.release();
+                                console.error(err);
+                                res.status(500).json({ status: false, message: "Commit Error" });
+                            });
+                        }
+
+                        connection.release();
+                        res.status(200).json({
+                            status: true,
+                            message: `Marked ${markedCount} salesmen as Absent`,
+                            data: {
+                                marked: markedCount,
+                                skipped: skippedCount,
+                                total: salesmanids.length
+                            }
+                        });
+                    });
+                } catch (error) {
+                    connection.rollback(() => {
+                        connection.release();
+                        console.error(error);
+                        res.status(500).json({ status: false, message: "Error processing attendance" });
+                    });
+                }
+            });
+        });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ status: false, message: "Technical Issue" });
+    }
+});
+
 // ==================== BATCH MARK ATTENDANCE ====================
 router.post("/mark-attendance-batch", rateLimiter.critical(), (req, res) => {
     try {

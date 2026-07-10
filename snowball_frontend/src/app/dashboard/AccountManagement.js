@@ -54,21 +54,16 @@ export default function AccountManagement({ cacheKey }) {
     // 👈 NEW: Filtered salesmen - hide if cleared (total_items = 0 and has_cleared = 1)
     const filteredSalesmen = useMemo(() => {
         let filtered = salesmen;
-        
+
         // Filter by search term
         if (searchTerm.trim()) {
             const term = searchTerm.toLowerCase();
-            filtered = filtered.filter(s => 
-                s.fullname?.toLowerCase().includes(term) || 
+            filtered = filtered.filter(s =>
+                s.fullname?.toLowerCase().includes(term) ||
                 s.mobileno?.includes(term)
             );
         }
-        
-        // Hide salesmen with no pending items (cleared and 0 total)
-        filtered = filtered.filter(s => 
-            !(parseFloat(s.total_items) === 0 && s.has_cleared === 1)
-        );
-        
+
         return filtered;
     }, [salesmen, searchTerm]);
 
@@ -77,6 +72,7 @@ export default function AccountManagement({ cacheKey }) {
         try {
             const result = await postData('handedgoods/retrieve-account-summary', {});
             if (result?.status) {
+                console.log('kzjdfbkjbf', result.data)
                 setSalesmen(result.data);
             }
         } catch (error) {
@@ -165,7 +161,7 @@ export default function AccountManagement({ cacheKey }) {
     }, [returnAmount]);
 
     const afterReturn = totals.totalItemAmount - returnValue;
-    
+
     // 👈 CHANGED: Auto-calculate commission as 1% of afterReturn if not manually entered
     const commissionValue = useMemo(() => {
         if (commissionAmount !== '') {
@@ -174,7 +170,7 @@ export default function AccountManagement({ cacheKey }) {
         // Auto-calculate 1% of afterReturn
         return Math.round(afterReturn * 1) / 100;
     }, [commissionAmount, afterReturn]);
-    
+
     const afterCommission = afterReturn - commissionValue;
     const finalBalance = afterCommission - totals.totalSubmitAmount;
 

@@ -32,33 +32,46 @@ const menuItems = [
     { id: 'salesman-details', label: 'Salesman Details', icon: Users },
     { id: 'attendance', label: 'Attendance Tracker', icon: ClipboardCheck },
     { id: 'handed-goods', label: 'Handed Goods', icon: PackageCheck },
+    { id: 'account', label: 'Salesman Account', icon: Calculator },
     { id: 'debts', label: 'Debt Management', icon: HandCoins },
-    { id: 'company-products', label: 'Company Products', icon: Factory },
     { id: 'total-sales', label: 'Total Sales', icon: TrendingUp },
+    { id: 'shop-goods', label: 'Shop Goods', icon: Truck },
+    { id: 'company-products', label: 'Company Products', icon: Factory },
     { id: 'products', label: 'Products', icon: Package },
     { id: 'batteries', label: 'Battery', icon: BatteryFull },
-    { id: 'shop-goods', label: 'Shop Goods', icon: Truck },
-    { id: 'account', label: 'Salesman Account', icon: Calculator },
 ];
 
 // Separate clock component to isolate re-renders
 function Clock() {
-    const [time, setTime] = useState(new Date());
+    const [time, setTime] = useState(null);
+    const [mounted, setMounted] = useState(false);
     const timerRef = useRef(null);
 
     useEffect(() => {
+        setMounted(true);
+        setTime(new Date());
         timerRef.current = setInterval(() => {
             setTime(new Date());
         }, 1000);
         return () => clearInterval(timerRef.current);
     }, []);
 
+    // Don't render anything until mounted on client
+    if (!mounted || !time) {
+        return (
+            <div className="text-center">
+                <p className="text-sm font-semibold text-gray-700">&nbsp;</p>
+                <p className="text-sm font-semibold text-gray-700">&nbsp;</p>
+            </div>
+        );
+    }
+
     return (
-        <div className="text-center">
-            <p className="text-sm font-semibold text-gray-700">
+        <div className="text-center" suppressHydrationWarning>
+            <p className="text-md font-bold text-gray-700">
                 {time.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
-            <p className="text-sm font-semibold text-gray-700">
+            <p className="text-md font-bold text-gray-700">
                 {time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </p>
         </div>
@@ -99,7 +112,7 @@ export default function Dashboard() {
                     {isSidebarOpen ? (
                         <div className="flex items-center space-x-2">
                             <div className="w-14 h-14 rounded-lg flex items-center justify-center overflow-hidden">
-                                <img src='yash.jpeg' className='object-cover w-auto'/>
+                                <img src='yash.jpeg' className='object-cover w-auto' />
                             </div>
                             <h1 className="text-xl font-semibold text-gray-900">Snow Ball</h1>
                         </div>
@@ -136,7 +149,7 @@ export default function Dashboard() {
                     {isSidebarOpen ? (
                         <div className="flex items-center">
                             <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                                <span className="text-sm font-medium text-gray-700"><img src='snowball.png'/></span>
+                                <span className="text-sm font-medium text-gray-700"><img src='snowball.png' /></span>
                             </div>
                             <div className="ml-3">
                                 <p className="text-sm font-medium text-gray-900">{user?.username}</p>
@@ -155,7 +168,7 @@ export default function Dashboard() {
 
             {/* Main Content */}
             <div className="flex-1 overflow-y-auto">
-                <header className="bg-white border-b border-gray-200 p-4 flex justify-between items-center sticky top-0 z-10">
+                <header className="bg-white border-b border-gray-200 py-2 px-4 flex justify-between items-center sticky top-0 z-10">
                     <h1 className="text-xl font-semibold text-gray-900">{activeLabel}</h1>
                     <Clock />
                     <div className="flex items-center space-x-3">
@@ -171,11 +184,11 @@ export default function Dashboard() {
                 <main className="p-6">
                     <div className={activeTab === 'home' ? '' : 'hidden'}><HomeComponent cacheKey="home" /></div>
                     <div className={activeTab === 'salesman-details' ? '' : 'hidden'}><SalesmanDetails cacheKey="salesman-details" /></div>
+                    <div className={activeTab === 'attendance' ? '' : 'hidden'}><AttendanceManagement cacheKey="attendance" /></div>
+                    <div className={activeTab === 'handed-goods' ? '' : 'hidden'}><HandedGoodsManagement cacheKey="handed-goods" /></div>
                     <div className={activeTab === 'products' ? '' : 'hidden'}><ProductManagement cacheKey="products" /></div>
                     <div className={activeTab === 'debts' ? '' : 'hidden'}><DebtManagement cacheKey="debts" /></div>
                     <div className={activeTab === 'company-products' ? '' : 'hidden'}><CompanyProductManagement cacheKey="company-products" /></div>
-                    <div className={activeTab === 'attendance' ? '' : 'hidden'}><AttendanceManagement cacheKey="attendance" /></div>
-                    <div className={activeTab === 'handed-goods' ? '' : 'hidden'}><HandedGoodsManagement cacheKey="handed-goods" /></div>
                     <div className={activeTab === 'batteries' ? '' : 'hidden'}><BatteryManagement cacheKey="batteries" /></div>
                     <div className={activeTab === 'total-sales' ? '' : 'hidden'}><TotalSales cacheKey="total-sales" /></div>
                     <div className={activeTab === 'shop-goods' ? '' : 'hidden'}><ShopGoods cacheKey="shop-goods" /></div>

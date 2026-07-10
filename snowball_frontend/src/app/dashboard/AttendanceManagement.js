@@ -156,6 +156,36 @@ export default function AttendanceManagement({ cacheKey }) {
         );
     }, [salesmen, searchTerm]);
 
+    // Mark all salesmen as absent for the selected date
+    const handleAbsentAll = useCallback(() => {
+        if (filteredSalesmen.length === 0) {
+            showToast('No salesmen to mark');
+            return;
+        }
+        showConfirm(
+            `Are you sure you want to mark ALL ${filteredSalesmen.length} salesmen as Absent for this date?`,
+            async () => {
+                try {
+                    const result = await postData('attendance/mark-all-absent', {
+                        attendance_date: selectedDate,
+                        salesmanids: filteredSalesmen.map(s => s.salesmanid)
+                    });
+                    if (result?.status) {
+                        clearCache(cacheKey);
+                        showToast('All salesmen marked as Absent!');
+                        fetchAttendance();
+                        fetchSalesmen();
+                    } else {
+                        showToast(result?.message || 'Failed to mark attendance');
+                    }
+                } catch (error) {
+                    console.error('Error marking all absent:', error);
+                    showToast('Error marking attendance');
+                }
+            }
+        );
+    }, [filteredSalesmen, selectedDate, showConfirm, showToast, cacheKey, fetchAttendance, fetchSalesmen]);
+
     useEffect(() => {
         if (!cachedData || salesmen.length === 0) {
             fetchSalesmen();
@@ -288,6 +318,13 @@ export default function AttendanceManagement({ cacheKey }) {
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
                     />
+                    {/* Absent All Button */}
+                    <button
+                        onClick={handleAbsentAll}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium cursor-pointer"
+                    >
+                        Absent All
+                    </button>
                     {/* Clear All Button */}
                     {attendance.length > 0 && (
                         <button

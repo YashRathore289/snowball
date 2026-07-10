@@ -281,7 +281,11 @@ router.post("/monthly-sales-report", rateLimiter.low(), (req, res) => {
         const sid = record.salesmanid;
         const sname = record.salesman_name;
         const saleDate = record.sale_date;
-        const finalAmt = parseFloat(record.finalamount) || 0;
+        const submitAmount = parseFloat(record.submit_amount) || 0;
+        const finalAmount = parseFloat(record.finalamount) || 0;
+
+        // Use submit_amount if available (> 0), otherwise use finalamount
+        const displayAmount = submitAmount > 0 ? submitAmount : finalAmount;
 
         if (!salesmenData[sid]) {
           salesmenData[sid] = {
@@ -293,8 +297,8 @@ router.post("/monthly-sales-report", rateLimiter.low(), (req, res) => {
         }
 
         if (saleDate) {
-          salesmenData[sid].entries[saleDate] = finalAmt;
-          salesmenData[sid].total += finalAmt;
+          salesmenData[sid].entries[saleDate] = displayAmount;
+          salesmenData[sid].total += displayAmount;
           allDates.add(saleDate);
         }
       });
