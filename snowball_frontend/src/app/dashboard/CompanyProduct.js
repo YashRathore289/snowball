@@ -45,7 +45,7 @@ export default function CompanyProductManagement({ cacheKey }) {
   ], []);
 
   const [entries, setEntries] = useState([
-    { IceCream: '', Type: '', OrderedQty: '', OrderedAmount: '', DeliveredQty: '', DeliveredAmount: '' }
+    { IceCream: '', IceCreamId: '', Type: '', OrderedQty: '', OrderedAmount: '', DeliveredQty: '', DeliveredAmount: '' }
   ]);
 
   const [toastMessage, setToastMessage] = useState('');
@@ -139,7 +139,7 @@ export default function CompanyProductManagement({ cacheKey }) {
 
   const handleAddClick = useCallback(() => {
     setFormData({ companyproductid: '', entry_date: new Date().toISOString().split('T')[0] });
-    setEntries([{ IceCream: '', Type: '', OrderedQty: '', OrderedAmount: '', DeliveredQty: '', DeliveredAmount: '' }]);
+    setEntries([{ IceCream: '', IceCreamId: '', Type: '', OrderedQty: '', OrderedAmount: '', DeliveredQty: '', DeliveredAmount: '' }]);
     setIsAddMode(true); setIsEditMode(false); setIsViewMode(false);
     setSelectedProduct(null); setIsModalOpen(true);
   }, []);
@@ -151,14 +151,22 @@ export default function CompanyProductManagement({ cacheKey }) {
     let items = [];
     if (Array.isArray(details)) items = details;
     else if (details?.items) items = details.items;
-    setEntries(items.map(item => ({
-      IceCream: item.IceCream || item.productname || '', Type: item.Type || '',
-      OrderedQty: item.OrderedQty || item.qty || '', OrderedAmount: item.OrderedAmount || item.total || '',
-      DeliveredQty: item.DeliveredQty || '', DeliveredAmount: item.DeliveredAmount || ''
-    })));
+    setEntries(items.map(item => {
+      // Find matching ice cream by productname to get the productid
+      const iceCream = iceCreams.find(ic => ic.productname === (item.IceCream || item.productname));
+      return {
+        IceCream: iceCream ? iceCream.productid : '',
+        IceCreamId: iceCream ? iceCream.productid : '',
+        Type: item.Type || '',
+        OrderedQty: item.OrderedQty || item.qty || '',
+        OrderedAmount: item.OrderedAmount || item.total || '',
+        DeliveredQty: item.DeliveredQty || '',
+        DeliveredAmount: item.DeliveredAmount || ''
+      };
+    }));
     setIsEditMode(true); setIsAddMode(false); setIsViewMode(false);
     setIsModalOpen(true);
-  }, []);
+  }, [iceCreams]);
 
   const handleInputChange = useCallback((e) => { const { name, value } = e.target; setFormData(prev => ({ ...prev, [name]: value })); }, []);
 
@@ -177,7 +185,7 @@ export default function CompanyProductManagement({ cacheKey }) {
   }, [showConfirm, performDelete]);
 
   const addEntryRow = useCallback(() => {
-    setEntries(prev => [...prev, { IceCream: '', Type: '', OrderedQty: '', OrderedAmount: '', DeliveredQty: '', DeliveredAmount: '' }]);
+    setEntries(prev => [...prev, { IceCream: '', IceCreamId: '', Type: '', OrderedQty: '', OrderedAmount: '', DeliveredQty: '', DeliveredAmount: '' }]);
   }, []);
   const removeEntryRow = useCallback((index) => { setEntries(prev => prev.filter((_, i) => i !== index)); }, []);
 
@@ -185,14 +193,40 @@ export default function CompanyProductManagement({ cacheKey }) {
     setEntries(prev => {
       const newEntries = [...prev];
       newEntries[index] = { ...newEntries[index], [field]: value };
-      if (field === 'OrderedQty' || field === 'IceCream') {
-        const iceCream = iceCreams.find(ic => ic.productname === newEntries[index].IceCream);
-        if (iceCream) { const price = parseFloat(iceCream.productprice) || 0; const qty = parseFloat(newEntries[index].OrderedQty) || 0; newEntries[index] = { ...newEntries[index], OrderedAmount: (price * qty).toFixed(2) }; }
+
+      if (field === 'IceCream') {
+        const iceCream = iceCreams.find(ic => String(ic.productid) === String(value));
+        if (iceCream) {
+          const price = parseFloat(iceCream.productprice) || 0;
+          const qty = parseFloat(newEntries[index].OrderedQty) || 0;
+          const delQty = parseFloat(newEntries[index].DeliveredQty) || 0;
+          newEntries[index] = {
+            ...newEntries[index],
+            IceCreamId: iceCream.productid,
+            OrderedAmount: (price * qty).toFixed(2),
+            DeliveredAmount: (price * delQty).toFixed(2)
+          };
+        }
       }
-      if (field === 'DeliveredQty' || field === 'IceCream') {
-        const iceCream = iceCreams.find(ic => ic.productname === newEntries[index].IceCream);
-        if (iceCream) { const price = parseFloat(iceCream.productprice) || 0; const qty = parseFloat(newEntries[index].DeliveredQty) || 0; newEntries[index] = { ...newEntries[index], DeliveredAmount: (price * qty).toFixed(2) }; }
+
+      if (field === 'OrderedQty') {
+        const iceCream = iceCreams.find(ic => String(ic.productid) === String(newEntries[index].IceCream));
+        if (iceCream) {
+          const price = parseFloat(iceCream.productprice) || 0;
+          const qty = parseFloat(value) || 0;
+          newEntries[index] = { ...newEntries[index], OrderedAmount: (price * qty).toFixed(2) };
+        }
       }
+
+      if (field === 'DeliveredQty') {
+        const iceCream = iceCreams.find(ic => String(ic.productid) === String(newEntries[index].IceCream));
+        if (iceCream) {
+          const price = parseFloat(iceCream.productprice) || 0;
+          const qty = parseFloat(value) || 0;
+          newEntries[index] = { ...newEntries[index], DeliveredAmount: (price * qty).toFixed(2) };
+        }
+      }
+
       return newEntries;
     });
   }, [iceCreams]);
@@ -201,11 +235,17 @@ export default function CompanyProductManagement({ cacheKey }) {
     try {
       const validEntries = entries.filter(entry => entry.IceCream);
       if (validEntries.length === 0) { showToast('Please fill at least one product'); return; }
-      const details = validEntries.map(entry => ({
-        IceCream: entry.IceCream, Type: entry.Type || '',
-        OrderedQty: parseFloat(entry.OrderedQty) || 0, OrderedAmount: parseFloat(entry.OrderedAmount) || 0,
-        DeliveredQty: parseFloat(entry.DeliveredQty) || 0, DeliveredAmount: parseFloat(entry.DeliveredAmount) || 0
-      }));
+      const details = validEntries.map(entry => {
+        const iceCream = iceCreams.find(ic => String(ic.productid) === String(entry.IceCream));
+        return {
+          IceCream: iceCream ? iceCream.productname : '',
+          Type: entry.Type || '',
+          OrderedQty: parseFloat(entry.OrderedQty) || 0,
+          OrderedAmount: parseFloat(entry.OrderedAmount) || 0,
+          DeliveredQty: parseFloat(entry.DeliveredQty) || 0,
+          DeliveredAmount: parseFloat(entry.DeliveredAmount) || 0
+        };
+      });
       if (isAddMode) {
         const result = await postData('companyproduct/insert-company-product', { entry_date: formData.entry_date, details });
         if (result?.status) { showToast('Product added successfully!'); setIsModalOpen(false); clearCache(cacheKey); fetchProducts(isFiltered ? selectedMonth : '', isFiltered ? selectedYear : ''); }
@@ -216,9 +256,9 @@ export default function CompanyProductManagement({ cacheKey }) {
         else { showToast(result?.message || 'Failed to update product'); }
       }
     } catch (error) { console.error('Error saving product:', error); showToast('Error saving product'); }
-  }, [entries, isAddMode, formData, fetchProducts, showToast, cacheKey, isFiltered, selectedMonth, selectedYear]);
+  }, [entries, isAddMode, formData, fetchProducts, showToast, cacheKey, isFiltered, selectedMonth, selectedYear, iceCreams]);
 
-  // 👈 NEW: Generate bill HTML
+  // Generate bill HTML
   const generateBillHTML = useCallback((product) => {
     const details = product.details;
     let items = Array.isArray(details) ? details : (details?.items || []);
@@ -249,7 +289,7 @@ export default function CompanyProductManagement({ cacheKey }) {
 <html>
 <head>
 <meta charset="UTF-8" />
-<title>Company Product Bill - ${product.entry_date?.split('T')[0] || ''}</title>
+<title>SnowBall Order - ${product.entry_date ? new Date(product.entry_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -282,7 +322,7 @@ export default function CompanyProductManagement({ cacheKey }) {
     <p class="sub">Company Product Receipt</p>
   </div>
   <hr />
-  <div class="meta"><span>Date</span><span>${product.entry_date?.split('T')[0] || ''}</span></div>
+  <div class="meta"><span>Date</span><span>${product.entry_date ? new Date(product.entry_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</span></div>
   <div class="meta"><span>Time</span><span>${new Date().toLocaleTimeString()}</span></div>
   <hr />
   <table>
@@ -306,34 +346,23 @@ export default function CompanyProductManagement({ cacheKey }) {
 </html>`;
   }, []);
 
-  // 👈 NEW: Open bill in new window
   const handleOpenBill = useCallback((product) => {
     const html = generateBillHTML(product);
     const win = window.open('', '_blank');
-    if (!win) {
-      showToast('Please allow popups to view the bill');
-      return;
-    }
+    if (!win) { showToast('Please allow popups to view the bill'); return; }
     win.document.open();
     win.document.write(html);
     win.document.close();
   }, [generateBillHTML, showToast]);
 
-  // 👈 NEW: Download/Print bill
   const handleDownloadBill = useCallback((product) => {
     const html = generateBillHTML(product);
     const win = window.open('', '_blank');
-    if (!win) {
-      showToast('Please allow popups to download the bill');
-      return;
-    }
+    if (!win) { showToast('Please allow popups to download the bill'); return; }
     win.document.open();
     win.document.write(html);
     win.document.close();
-    setTimeout(() => {
-      win.focus();
-      win.print();
-    }, 300);
+    setTimeout(() => { win.focus(); win.print(); }, 300);
   }, [generateBillHTML, showToast]);
 
   const renderDetails = useCallback((details) => {
@@ -356,7 +385,6 @@ export default function CompanyProductManagement({ cacheKey }) {
                   <span className="font-semibold text-gray-800 text-sm truncate">{item.IceCream || item.productname}</span>
                   {item.Type && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 whitespace-nowrap">{item.Type}</span>}
                 </div>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 ${isComplete ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{isComplete ? 'Done' : `${remaining} left`}</span>
               </div>
               <div className="flex items-center gap-4 text-xs text-gray-500">
                 <span className="font-mono">Ord: <span className="text-gray-700 font-medium">{ordered}</span><span className="text-gray-400"> (₹{orderedAmt.toFixed(2)})</span></span>
@@ -382,7 +410,6 @@ export default function CompanyProductManagement({ cacheKey }) {
                 <p className="text-sm text-white/80">Date: {selectedProduct.entry_date?.split('T')[0]}</p>
               </div>
               <div className="flex items-center gap-2">
-                {/* 👈 NEW: Bill buttons in view mode */}
                 <button onClick={() => handleOpenBill(selectedProduct)}
                   className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors text-sm cursor-pointer flex items-center gap-1">
                   <FileText className="w-4 h-4" /> View Bill
@@ -431,7 +458,9 @@ export default function CompanyProductManagement({ cacheKey }) {
                     <select value={entry.IceCream} onChange={(e) => handleEntryChange(index, 'IceCream', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <option value="">Select Ice Cream</option>
-                      {iceCreams.map((ice) => (<option key={ice.productid} value={ice.productname}>{ice.productname} (₹{parseFloat(ice.productprice).toFixed(2)})</option>))}
+                      {iceCreams.map((ice) => (
+                        <option key={ice.productid} value={ice.productid}>{ice.productname} (₹{parseFloat(ice.productprice).toFixed(2)})</option>
+                      ))}
                     </select>
                   </div>
                   <div><input type="text" value={entry.Type} onChange={(e) => handleEntryChange(index, 'Type', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Type" /></div>
@@ -529,7 +558,7 @@ export default function CompanyProductManagement({ cacheKey }) {
                   totalOrdered += parseFloat(item.OrderedQty || item.qty) || 0;
                   totalDelivered += parseFloat(item.DeliveredQty || 0) || 0;
                   totalOrderedAmt += parseFloat(item.OrderedAmount || item.total) || 0;
-                  totalDeliveredAmt += parseFloat(item.DeliveredAmount || 0) || 0;
+                  totalDeliveredAmt += parseFloat(item.DeliveredAmount) || 0;
                 });
                 return (
                   <tr key={product.companyproductid} className="hover:bg-blue-50/50 transition-colors duration-150">

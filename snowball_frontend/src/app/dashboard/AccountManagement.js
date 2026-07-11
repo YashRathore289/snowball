@@ -30,7 +30,7 @@ export default function AccountManagement({ cacheKey }) {
     const [returnAmount, setReturnAmount] = useState(cachedData?.returnAmount || '');
     const [commissionAmount, setCommissionAmount] = useState(cachedData?.commissionAmount || '');
     const [saving, setSaving] = useState(false);
-    const [searchTerm, setSearchTerm] = useState(''); // 👈 NEW
+    const [searchTerm, setSearchTerm] = useState('');
 
     // Date filter states
     const [fromDate, setFromDate] = useState('');
@@ -51,11 +51,8 @@ export default function AccountManagement({ cacheKey }) {
         setToastVisible(true);
     }, []);
 
-    // 👈 NEW: Filtered salesmen - hide if cleared (total_items = 0 and has_cleared = 1)
     const filteredSalesmen = useMemo(() => {
         let filtered = salesmen;
-
-        // Filter by search term
         if (searchTerm.trim()) {
             const term = searchTerm.toLowerCase();
             filtered = filtered.filter(s =>
@@ -63,7 +60,6 @@ export default function AccountManagement({ cacheKey }) {
                 s.mobileno?.includes(term)
             );
         }
-
         return filtered;
     }, [salesmen, searchTerm]);
 
@@ -121,7 +117,7 @@ export default function AccountManagement({ cacheKey }) {
         setViewMode('list');
         setSelectedSalesman(null);
         setEntries([]);
-        fetchSalesmen(); // 👈 Refresh list when going back
+        fetchSalesmen();
     }, [fetchSalesmen]);
 
     const handleDateFilter = useCallback(() => {
@@ -146,33 +142,42 @@ export default function AccountManagement({ cacheKey }) {
         let hasClearedEntry = false;
 
         entries.forEach(entry => {
+            // If entry is cleared, don't count it
+            if (entry.clear_status === 1) {
+                hasClearedEntry = true;
+                return; // Skip cleared entries
+            }
             totalItemAmount += parseFloat(entry.item_total) || 0;
             totalSubmitAmount += parseFloat(entry.submit_amount) || 0;
-            if (entry.clear_status === 1) hasClearedEntry = true;
         });
 
         return { totalItemAmount, totalSubmitAmount, hasClearedEntry };
     }, [entries]);
 
-    // Evaluate return amount expression
+    // 1. Total Item Amount
+    const totalItemAmount = totals.totalItemAmount;
+
+    // 2. Return Amount (manual input)
     const returnValue = useMemo(() => {
+        if (returnAmount === '') return null;
         const val = evaluateExpression(returnAmount);
-        return val !== null ? val : 0;
+        return val !== null ? val : null;
     }, [returnAmount]);
 
-    const afterReturn = totals.totalItemAmount - returnValue;
+    // 3. After Return = 1 - 2
+    const afterReturn = returnValue !== null ? totalItemAmount - returnValue : null;
 
-    // 👈 CHANGED: Auto-calculate commission as 1% of afterReturn if not manually entered
-    const commissionValue = useMemo(() => {
-        if (commissionAmount !== '') {
-            return parseFloat(commissionAmount) || 0;
-        }
-        // Auto-calculate 1% of afterReturn
-        return Math.round(afterReturn * 1) / 100;
-    }, [commissionAmount, afterReturn]);
+    // 4. Commission (simple input, no auto-calculation)
+    const commissionValue = commissionAmount !== '' ? (parseFloat(commissionAmount) || 0) : null;
 
-    const afterCommission = afterReturn - commissionValue;
-    const finalBalance = afterCommission - totals.totalSubmitAmount;
+    // 5. After Commission = 3 - 4
+    const afterCommission = (afterReturn !== null && commissionValue !== null) ? afterReturn - commissionValue : null;
+
+    // 6. Submit Amount (from table)
+    const submitAmount = totals.totalSubmitAmount;
+
+    // 7. Final Amount = 5 - 6
+    const finalBalance = (afterCommission !== null) ? afterCommission - submitAmount : null;
 
     const handleSaveSettlement = useCallback(async () => {
         if (!selectedSalesman) return;
@@ -180,12 +185,12 @@ export default function AccountManagement({ cacheKey }) {
         try {
             const result = await postData('handedgoods/save-settlement', {
                 salesmanid: selectedSalesman.salesmanid,
-                total_item_amount: totals.totalItemAmount,
-                return_amount: returnValue,
-                after_return: afterReturn,
-                commission_amount: commissionValue,
-                after_commission: afterCommission,
-                final_balance: finalBalance
+                total_item_amount: totalItemAmount,
+                return_amount: returnValue || 0,
+                after_return: afterReturn || 0,
+                commission_amount: commissionValue || 0,
+                after_commission: afterCommission || 0,
+                final_balance: finalBalance || 0
             });
 
             if (result?.status) {
@@ -206,7 +211,13 @@ export default function AccountManagement({ cacheKey }) {
         } finally {
             setSaving(false);
         }
-    }, [selectedSalesman, totals.totalItemAmount, returnValue, afterReturn, commissionValue, afterCommission, finalBalance, showToast, fetchSalesmen, fetchSalesmanEntries, fromDate, toDate]);
+    }, [selectedSalesman, totalItemAmount, returnValue, afterReturn, commissionValue, afterCommission, finalBalance, showToast, fetchSalesmen, fetchSalesmanEntries, fromDate, toDate]);
+
+    // Helper to format amount
+    const formatAmount = (val) => {
+        if (val === null || val === undefined) return '-';
+        return `₹${val.toFixed(0)}`;
+    };
 
     // ---------- RENDER SALESMAN LIST ----------
     const renderSalesmanList = () => {
@@ -220,7 +231,6 @@ export default function AccountManagement({ cacheKey }) {
 
         return (
             <div>
-                {/* 👈 NEW: Search Bar */}
                 <div className="mb-4">
                     <input
                         type="text"
@@ -353,10 +363,10 @@ export default function AccountManagement({ cacheKey }) {
                                         <tr key={idx} className={`hover:bg-gray-50 transition-colors ${entry.clear_status === 1 ? 'opacity-50' : ''}`}>
                                             <td className="px-4 py-3 text-sm text-gray-900">{entry.date}</td>
                                             <td className="px-4 py-3 text-sm font-semibold text-blue-600 text-right">
-                                                ₹{parseFloat(entry.item_total || 0).toFixed(0)}
+                                                {entry.clear_status === 1 ? '₹0' : `₹${parseFloat(entry.item_total || 0).toFixed(0)}`}
                                             </td>
                                             <td className="px-4 py-3 text-sm font-semibold text-green-600 text-right">
-                                                ₹{parseFloat(entry.submit_amount || 0).toFixed(0)}
+                                                {entry.clear_status === 1 ? '₹0' : `₹${parseFloat(entry.submit_amount || 0).toFixed(0)}`}
                                             </td>
                                             <td className="px-4 py-3 text-sm text-center">
                                                 {entry.clear_status === 1 ? '✅' : '❌'}
@@ -383,52 +393,64 @@ export default function AccountManagement({ cacheKey }) {
                     </div>
                 </div>
 
-                {/* Settlement Calculation - ALWAYS SHOW */}
+                {/* Settlement Calculation */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Settlement Calculation</h3>
 
                     <div className="space-y-3 max-w-lg">
+                        {/* 1. Total Item Amount */}
                         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                             <span className="text-sm font-medium text-gray-700">1. Total Item Amount</span>
-                            <span className="text-lg font-bold text-blue-600">₹{totals.totalItemAmount.toFixed(0)}</span>
+                            <span className="text-lg font-bold text-blue-600">{formatAmount(totalItemAmount)}</span>
                         </div>
 
+                        {/* 2. Return Amount */}
                         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                             <span className="text-sm font-medium text-gray-700">2. Return Amount</span>
                             <input
                                 type="text"
                                 value={returnAmount}
                                 onChange={(e) => setReturnAmount(e.target.value)}
-                                placeholder="e.g., 80+74+90"
+                                placeholder="Enter amount"
                                 className="w-40 px-3 py-2 border border-gray-300 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
 
+                        {/* 3. After Return */}
                         <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                            <span className="text-sm font-medium text-gray-700">3. After Return</span>
-                            <span className="text-lg font-bold text-blue-600">₹{afterReturn.toFixed(0)}</span>
+                            <span className="text-sm font-medium text-gray-700">3. After Return (1 - 2)</span>
+                            <span className="text-lg font-bold text-blue-600">{formatAmount(afterReturn)}</span>
                         </div>
 
+                        {/* 4. Commission */}
                         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                            <span className="text-sm font-medium text-gray-700">4. Commission (1% auto)</span>
+                            <span className="text-sm font-medium text-gray-700">4. Commission</span>
                             <input
                                 type="text" inputMode='numeric'
                                 value={commissionAmount}
                                 onChange={(e) => setCommissionAmount(e.target.value)}
-                                placeholder={Math.round(afterReturn * 1 / 100).toString()}
+                                placeholder="Enter commission"
                                 className="w-40 px-3 py-2 border border-gray-300 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
 
+                        {/* 5. After Commission */}
                         <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                            <span className="text-sm font-medium text-gray-700">5. After Commission</span>
-                            <span className="text-lg font-bold text-blue-600">₹{afterCommission.toFixed(0)}</span>
+                            <span className="text-sm font-medium text-gray-700">5. After Commission (3 - 4)</span>
+                            <span className="text-lg font-bold text-blue-600">{formatAmount(afterCommission)}</span>
                         </div>
 
+                        {/* 6. Submit Amount */}
+                        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <span className="text-sm font-medium text-gray-700">6. Submit Amount</span>
+                            <span className="text-lg font-bold text-green-600">{formatAmount(submitAmount)}</span>
+                        </div>
+
+                        {/* 7. Final Amount */}
                         <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-                            <span className="text-sm font-bold text-gray-700">6. Final Balance</span>
-                            <span className={`text-xl font-bold ${finalBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                ₹{finalBalance.toFixed(0)}
+                            <span className="text-sm font-bold text-gray-700">7. Final Amount (5 - 6)</span>
+                            <span className={`text-xl font-bold ${finalBalance !== null && finalBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {formatAmount(finalBalance)}
                             </span>
                         </div>
 

@@ -117,8 +117,8 @@ export default function Dashboard() {
                             <h1 className="text-xl font-semibold text-gray-900">Snow Ball</h1>
                         </div>
                     ) : (
-                        <div className="w-14 h-14 rounded-lg flex items-center justify-center mx-auto">
-                            <span className="text-white font-bold text-sm"><img src='yash.jpeg' /></span>
+                        <div className="w-14 h-14 rounded-lg flex items-center justify-center mx-auto overflow-hidden">
+                            <span className="text-white font-bold text-sm w-full h-10 overflow-hidden"><img src='yash.jpeg'/></span>
                         </div>
                     )}
                     <button

@@ -401,7 +401,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
       }
       return `<tr><td>${qty}</td><td>${desc}</td><td class="num">${price}</td><td class="num">${total}</td></tr>`;
     }).join('');
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Bill - ${card.salesmanName || 'Salesman'}</title><style>* { box-sizing: border-box; } body { font-family: 'Courier New', Courier, monospace; width: 300px; margin: 20px auto; color: #111; background: #fff; } .center { text-align: center; } h1 { font-size: 16px; margin: 0 0 2px; letter-spacing: 1px; } .sub { font-size: 11px; margin: 0 0 8px; color: #444; } hr { border: none; border-top: 1px dashed #999; margin: 6px 0; } .meta { font-size: 11px; margin: 2px 0; display: flex; justify-content: space-between; } table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; } th { text-align: left; font-size: 10px; border-bottom: 1px dashed #999; padding-bottom: 4px; } td { padding: 3px 0; vertical-align: top; } .num { text-align: right; white-space: nowrap; } .totals-row { display: flex; justify-content: space-between; font-size: 12px; margin: 3px 0; } .final { font-weight: bold; font-size: 15px; margin-top: 6px; } .thankyou { text-align: center; margin-top: 14px; font-size: 12px; letter-spacing: 2px; } @media print { body { width: 80mm; margin: 0 auto; } }</style></head><body style="border:0.01px solid #9b9b9b; padding:5px;"><div class="center"><h1>SNOW BALL ICE CREAM</h1><p class="sub">Distribution Receipt</p></div><hr /><div class="meta"><span>Salesman</span><span>${card.salesmanName || 'N/A'}</span></div><div class="meta"><span>Date</span><span>${recordDate || card.cardDate || date}</span></div><div class="meta"><span>Time</span><span>${new Date().toLocaleTimeString()}</span></div><hr /><table><thead><tr><th>QTY</th><th>DESC</th><th class="num">PRICE</th><th class="num">TOTAL</th></tr></thead><tbody>${rowsHtml}</tbody></table><hr /><div class="totals-row final"><span>TOTAL</span><span>Rs ${itemsTotal.toFixed(0)}</span></div><p class="thankyou">* THANK YOU *</p></body></html>`;
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>${card.salesmanName || 'Salesman'} ${(() => { const d = recordDate || card.cardDate || date; return d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''; })()}</title><style>* { box-sizing: border-box; } body { font-family: 'Courier New', Courier, monospace; width: 300px; margin: 20px auto; color: #111; background: #fff; } .center { text-align: center; } h1 { font-size: 16px; margin: 0 0 2px; letter-spacing: 1px; } .sub { font-size: 11px; margin: 0 0 8px; color: #444; } hr { border: none; border-top: 1px dashed #999; margin: 6px 0; } .meta { font-size: 11px; margin: 2px 0; display: flex; justify-content: space-between; } table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; } th { text-align: left; font-size: 10px; border-bottom: 1px dashed #999; padding-bottom: 4px; } td { padding: 3px 0; vertical-align: top; } .num { text-align: right; white-space: nowrap; } .totals-row { display: flex; justify-content: space-between; font-size: 12px; margin: 3px 0; } .final { font-weight: bold; font-size: 15px; margin-top: 6px; } .thankyou { text-align: center; margin-top: 14px; font-size: 12px; letter-spacing: 2px; } @media print { body { width: 80mm; margin: 0 auto; } }</style></head><body style="border:0.01px solid #9b9b9b; padding:5px;"><div class="center"><h1>SNOW BALL ICE CREAM</h1><p class="sub">Distribution Receipt</p></div><hr /><div class="meta"><span>Salesman</span><span>${card.salesmanName || 'N/A'}</span></div><div class="meta"><span>Date</span><span>${(() => { const d = recordDate || card.cardDate || date; return d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''; })()}</span></div><div class="meta"><span>Time</span><span>${new Date().toLocaleTimeString()}</span></div><hr /><table><thead><tr><th>QTY</th><th>DESC</th><th class="num">PRICE</th><th class="num">TOTAL</th></tr></thead><tbody>${rowsHtml}</tbody></table><hr /><div class="totals-row final"><span>TOTAL</span><span>Rs ${itemsTotal.toFixed(0)}</span></div><p class="thankyou">* THANK YOU *</p></body></html>`;
   }, [date]);
 
   const handleOpenBill = useCallback((card, recordDate) => {
@@ -454,10 +454,12 @@ export default function HandedGoodsManagement({ cacheKey }) {
       clear_status: card.clearStatus ? 1 : 0,
       submit_amount: parseFloat(card.submitAmount) || 0,
     };
-    if (card.commission !== '' && card.commission !== null && card.commission !== undefined) {
-      payload.finalamount = finalAmount;
-    }
     const isUpdate = card.handedgoodsid || card.isUpdateMode || card.editMode;
+    if (!isUpdate) {
+      if (card.commission !== '' && card.commission !== null && card.commission !== undefined) {
+        payload.finalamount = finalAmount;
+      }
+    }
     if (isUpdate && card.handedgoodsid) { payload.handedgoodsid = card.handedgoodsid; }
     updateCard(card.cardid, { saving: true }, isEdit);
     try {
@@ -470,6 +472,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
         if (result.data) { newId = result.data.handedgoodsid || result.data?.data?.handedgoodsid || result.data?.handedgoodsid; }
         updateCard(card.cardid, { saving: false, saved: true, editMode: false, isUpdateMode: true, handedgoodsid: newId || card.handedgoodsid, cardDate: saveDate }, isEdit);
         await fetchAssignedBatteries();
+        await fetchSalesmen(date);
         if (showRecords) await fetchRecords();
       } else {
         showToast(result?.message || 'Failed to save record');
@@ -500,9 +503,9 @@ export default function HandedGoodsManagement({ cacheKey }) {
       allBigExpr: item.allBigExpr || '',
     })) || [emptyRow()];
     newCardData.returnExpr = String(record.returnExpr === '0.00' ? 0 : record.returnExpr || '');;
-    newCardData.commission = String(record.commission || '');
+    newCardData.commission = String(record.commission === '0.00' ? '' : record.commission || '');
     newCardData.clearStatus = record.clear_status === 1;
-    newCardData.submitAmount = String(record.submit_amount || '');
+    newCardData.submitAmount = String(record.submit_amount === '0.00' ? '' : record.submit_amount || '');
     newCardData.editMode = true;
     newCardData.handedgoodsid = record.handedgoodsid;
     newCardData.cardDate = record.date;
@@ -677,15 +680,14 @@ export default function HandedGoodsManagement({ cacheKey }) {
     // Group records by date
     const groupedByDate = {};
     filteredRecords.forEach(record => {
-      const recordDate = record.date || 'Unknown';
+      const recordDate = record.date ? new Date(record.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Unknown';
       if (!groupedByDate[recordDate]) {
         groupedByDate[recordDate] = [];
       }
       groupedByDate[recordDate].push(record);
     });
 
-    const sortedDates = Object.keys(groupedByDate).sort();
-    let sno = 0;
+    const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b) - new Date(a));
 
     return (
       <div className="overflow-x-auto">
@@ -710,7 +712,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
                 <React.Fragment key={dateStr}>
                   <tr className="bg-blue-50">
                     <td colSpan="9" className="px-4 py-2 text-sm font-bold text-blue-700">
-                      📅 {dateStr}
+                      📅 {new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </td>
                   </tr>
                   {groupedByDate[dateStr].map((record, idx) => {
