@@ -152,8 +152,7 @@ export default function CompanyProductManagement({ cacheKey }) {
     if (Array.isArray(details)) items = details;
     else if (details?.items) items = details.items;
     setEntries(items.map(item => {
-      // Find matching ice cream by productname to get the productid
-      const iceCream = iceCreams.find(ic => ic.productname === (item.IceCream || item.productname));
+      const iceCream = iceCreams.find(ic => String(ic.productid) === String(item.productid));
       return {
         IceCream: iceCream ? iceCream.productid : '',
         IceCreamId: iceCream ? iceCream.productid : '',
@@ -240,6 +239,8 @@ export default function CompanyProductManagement({ cacheKey }) {
         return {
           IceCream: iceCream ? iceCream.productname : '',
           Type: entry.Type || '',
+          productid: entry.IceCream,
+          price: iceCream ? iceCream.productprice : '',
           OrderedQty: parseFloat(entry.OrderedQty) || 0,
           OrderedAmount: parseFloat(entry.OrderedAmount) || 0,
           DeliveredQty: parseFloat(entry.DeliveredQty) || 0,
@@ -266,10 +267,9 @@ export default function CompanyProductManagement({ cacheKey }) {
     const rowsHtml = items.map(item => {
       const ordered = parseFloat(item.OrderedQty || item.qty) || 0;
       const delivered = parseFloat(item.DeliveredQty) || 0;
-
       return `
         <tr>
-          <td>${item.IceCream || item.productname || ''}</td>
+          <td>${item.IceCream || item.productname || ''}${item.price ? ` (₹${item.price})` : ''}</td>
           <td>${item.Type || '-'}</td>
           <td class="num">${ordered}</td>
           <td class="num">${delivered}</td>

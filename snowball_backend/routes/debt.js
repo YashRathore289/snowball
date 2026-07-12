@@ -16,7 +16,8 @@ router.post("/retrieve-debts", rateLimiter.high(), (req, res) => {
             s.mobileno AS salesman_mobile,
             d.type,
             DATE_FORMAT(d.debt_date, '%Y-%m-%d') AS debt_date,
-            d.amount
+            d.amount,
+            d.note
         FROM salesman_debt d
         LEFT JOIN salesman s ON d.salesmanid = s.salesmanid`;
 
@@ -91,7 +92,7 @@ router.post("/retrieve-all-debts-summary", rateLimiter.high(), (req, res) => {
 // ==================== 2. INSERT DEBT ====================
 router.post("/insert-debt", rateLimiter.critical(), (req, res) => {
     try {
-        const { salesmanid, type, debt_date, amount } = req.body;
+        const { salesmanid, type, debt_date, amount, note } = req.body;
 
         if (!salesmanid || !type || !debt_date || !amount) {
             return res.status(400).json({ status: false, message: "Salesman ID, Type, Date, and Amount are required" });
@@ -108,8 +109,8 @@ router.post("/insert-debt", rateLimiter.critical(), (req, res) => {
             }
 
             pool.query(
-                "INSERT INTO salesman_debt (salesmanid, type, debt_date, amount, createdat, updatedat) VALUES (?, ?, ?, ?, NOW(), NOW())",
-                [salesmanid, type, debt_date, amount],
+                "INSERT INTO salesman_debt (salesmanid, type, debt_date, amount, note, createdat, updatedat) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+                [salesmanid, type, debt_date, amount, note],
                 (error, insertResult) => {
                     if (error) {
                         console.error(error);
@@ -118,7 +119,7 @@ router.post("/insert-debt", rateLimiter.critical(), (req, res) => {
 
                     // Fetch the newly inserted record
                     pool.query(
-                        `SELECT d.debtid, d.salesmanid, s.fullname AS salesman_name, d.type, DATE_FORMAT(d.debt_date, '%Y-%m-%d') AS debt_date, d.amount
+                        `SELECT d.debtid, d.salesmanid, s.fullname AS salesman_name, d.type, DATE_FORMAT(d.debt_date, '%Y-%m-%d') AS debt_date, d.amount, d.note
                         FROM salesman_debt d
                         LEFT JOIN salesman s ON d.salesmanid = s.salesmanid
                         WHERE d.debtid = ?`,
@@ -142,7 +143,7 @@ router.post("/insert-debt", rateLimiter.critical(), (req, res) => {
 // ==================== 3. UPDATE DEBT ====================
 router.post("/update-debt", rateLimiter.critical(), (req, res) => {
     try {
-        const { debtid, salesmanid, type, debt_date, amount } = req.body;
+        const { debtid, salesmanid, type, debt_date, amount, note } = req.body;
 
         if (!debtid) {
             return res.status(400).json({ status: false, message: "Debt ID is required" });
@@ -155,6 +156,7 @@ router.post("/update-debt", rateLimiter.critical(), (req, res) => {
         if (type !== undefined) { updateFields.push('type = ?'); values.push(type); }
         if (debt_date !== undefined) { updateFields.push('debt_date = ?'); values.push(debt_date); }
         if (amount !== undefined) { updateFields.push('amount = ?'); values.push(amount); }
+        if (note !== undefined) { updateFields.push('note = ?'); values.push(note); }
 
         if (updateFields.length === 0) {
             return res.status(400).json({ status: false, message: "No fields to update" });
@@ -175,7 +177,7 @@ router.post("/update-debt", rateLimiter.critical(), (req, res) => {
 
             // Fetch updated record
             pool.query(
-                `SELECT d.debtid, d.salesmanid, s.fullname AS salesman_name, d.type, DATE_FORMAT(d.debt_date, '%Y-%m-%d') AS debt_date, d.amount
+                `SELECT d.debtid, d.salesmanid, s.fullname AS salesman_name, d.type, DATE_FORMAT(d.debt_date, '%Y-%m-%d') AS debt_date, d.amount, d.note
                 FROM salesman_debt d
                 LEFT JOIN salesman s ON d.salesmanid = s.salesmanid
                 WHERE d.debtid = ?`,
@@ -205,7 +207,7 @@ router.post("/delete-debt", rateLimiter.critical(), (req, res) => {
 
         // Fetch before delete
         pool.query(
-            `SELECT d.debtid, d.salesmanid, s.fullname AS salesman_name, d.type, DATE_FORMAT(d.debt_date, '%Y-%m-%d') AS debt_date, d.amount
+            `SELECT d.debtid, d.salesmanid, s.fullname AS salesman_name, d.type, DATE_FORMAT(d.debt_date, '%Y-%m-%d') AS debt_date, d.amount, d.note
             FROM salesman_debt d
             LEFT JOIN salesman s ON d.salesmanid = s.salesmanid
             WHERE d.debtid = ?`,

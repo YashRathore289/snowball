@@ -18,7 +18,8 @@ export default function DebtManagement({ cacheKey }) {
     debtid: '',
     type: 'give',
     amount: '',
-    debt_date: new Date().toISOString().split('T')[0]
+    debt_date: new Date().toISOString().split('T')[0],
+    note: ''
   });
   const [salesmanDebtSummary, setSalesmanDebtSummary] = useState(cachedData?.salesmanDebtSummary || {});
   const [searchTerm, setSearchTerm] = useState(''); // 👈 NEW
@@ -83,8 +84,8 @@ export default function DebtManagement({ cacheKey }) {
   const filteredSalesmen = useMemo(() => {
     if (!searchTerm.trim()) return salesmen;
     const term = searchTerm.toLowerCase();
-    return salesmen.filter(s => 
-      s.fullname?.toLowerCase().includes(term) || 
+    return salesmen.filter(s =>
+      s.fullname?.toLowerCase().includes(term) ||
       s.mobileno?.includes(term)
     );
   }, [salesmen, searchTerm]);
@@ -177,7 +178,8 @@ export default function DebtManagement({ cacheKey }) {
       debtid: '',
       type,
       amount: '',
-      debt_date: new Date().toISOString().split('T')[0]
+      debt_date: new Date().toISOString().split('T')[0],
+      note: ''
     });
     setIsEditMode(false);
     setIsModalOpen(true);
@@ -188,7 +190,8 @@ export default function DebtManagement({ cacheKey }) {
       debtid: debt.debtid,
       type: debt.type,
       amount: debt.amount,
-      debt_date: debt.debt_date
+      debt_date: debt.debt_date,
+      note: debt.note || ''
     });
     setIsEditMode(true);
     setIsModalOpen(true);
@@ -208,7 +211,8 @@ export default function DebtManagement({ cacheKey }) {
           salesmanid: selectedSalesman.salesmanid,
           type: formData.type,
           debt_date: formData.debt_date,
-          amount: formData.amount
+          amount: formData.amount,
+          note: formData.note
         });
         if (result?.status) {
           clearCache(cacheKey);
@@ -224,7 +228,8 @@ export default function DebtManagement({ cacheKey }) {
           salesmanid: selectedSalesman.salesmanid,
           type: formData.type,
           debt_date: formData.debt_date,
-          amount: formData.amount
+          amount: formData.amount,
+          note: formData.note
         });
         if (result?.status) {
           clearCache(cacheKey);
@@ -314,6 +319,18 @@ export default function DebtManagement({ cacheKey }) {
                   value={formData.debt_date}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-gray-700">Note</label>
+                <textarea
+                  name="note"
+                  value={formData.note}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  placeholder="Add a note (optional)"
+                  rows="3"
                 />
               </div>
             </div>
@@ -551,6 +568,7 @@ export default function DebtManagement({ cacheKey }) {
                     <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Date</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Type</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Note</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
@@ -570,6 +588,11 @@ export default function DebtManagement({ cacheKey }) {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
                         <span className={debt.type === 'give' ? 'text-red-600' : 'text-green-600'}>
                           ₹{parseFloat(debt.amount).toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
+                        <span className="text-gray-400 text-xs ml-2 truncate block max-w-[150px]" title={debt.note}>
+                          {debt.note?.length > 20 ? debt.note?.substring(0, 20) + '...' : debt.note}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
