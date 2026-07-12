@@ -227,12 +227,21 @@ export default function AttendanceManagement({ cacheKey }) {
 
     const monthlyAttendanceMap = useMemo(() => {
         const map = {};
-        attendance.forEach(record => {
-            const key = `${record.salesmanid}-${record.attendance_date}`;
-            map[key] = record.status;
-        });
+        if (viewMode === 'monthly' && attendance.length > 0 && attendance[0].attendance_records) {
+            attendance.forEach(salesman => {
+                (salesman.attendance_records || []).forEach(record => {
+                    const key = `${salesman.salesmanid}-${record.attendance_date}`;
+                    map[key] = record.status;
+                });
+            });
+        } else {
+            attendance.forEach(record => {
+                const key = `${record.salesmanid}-${record.attendance_date}`;
+                map[key] = record.status;
+            });
+        }
         return map;
-    }, [attendance]);
+    }, [attendance, viewMode]);
 
     const daysInMonth = useMemo(
         () => new Date(currentYear, currentMonth, 0).getDate(),
@@ -460,13 +469,15 @@ export default function AttendanceManagement({ cacheKey }) {
                                         {index + 1}
                                     </th>
                                 ))}
+                                <th className="px-2 py-2 text-center text-md font-bold text-green-600 border-r border-gray-300">TP</th>
+                                <th className="px-2 py-2 text-center text-md font-bold text-red-600 border-r border-gray-300">TA</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {salesmen.map(salesman => (
+                            {attendance.map(salesman => (
                                 <tr key={salesman.salesmanid} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-3 py-2 text-sm font-medium text-gray-900 whitespace-nowrap border-r border-gray-300">
-                                        {salesman.fullname}
+                                        {salesman.salesman_name || salesman.fullname}
                                     </td>
                                     {Array.from({ length: daysInMonth }).map((_, dayIndex) => {
                                         const day = dayIndex + 1;
@@ -488,6 +499,12 @@ export default function AttendanceManagement({ cacheKey }) {
                                             </td>
                                         );
                                     })}
+                                    <td className="px-2 py-2 text-center text-xs font-bold text-green-600 border-r border-gray-200">
+                                        {salesman.total_present || 0}
+                                    </td>
+                                    <td className="px-2 py-2 text-center text-xs font-bold text-red-600 border-r border-gray-200">
+                                        {salesman.total_absent || 0}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>

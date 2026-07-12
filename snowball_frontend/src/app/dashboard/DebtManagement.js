@@ -548,7 +548,6 @@ export default function DebtManagement({ cacheKey }) {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">S.No</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Debt ID</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Date</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Type</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Amount</th>
@@ -559,7 +558,6 @@ export default function DebtManagement({ cacheKey }) {
                   {debts.map((debt, index) => (
                     <tr key={debt.debtid} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">#{debt.debtid}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{debt.debt_date}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${debt.type === 'give'

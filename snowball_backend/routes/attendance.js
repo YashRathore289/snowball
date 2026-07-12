@@ -8,54 +8,78 @@ router.post("/retrieve-attendance", rateLimiter.high(), async (req, res) => {
     try {
         const { attendance_date, month, year } = req.body;
 
-        let query;
-        let values = [];
-
         if (attendance_date) {
-            // Daily view: get all records for this date
-            query = `SELECT 
-        sa.attendanceid,
-        sa.salesmanid,
-        s.fullname AS salesman_name,
-        DATE_FORMAT(sa.attendance_date, '%Y-%m-%d') AS attendance_date,
-        sa.status
-      FROM salesman_attendance sa
-      LEFT JOIN salesman s ON sa.salesmanid = s.salesmanid
-      WHERE sa.attendance_date = ?
-      ORDER BY s.fullname`;
-            values = [attendance_date];
+            const query = `SELECT 
+                sa.attendanceid,
+                sa.salesmanid,
+                s.fullname AS salesman_name,
+                DATE_FORMAT(sa.attendance_date, '%Y-%m-%d') AS attendance_date,
+                sa.status
+              FROM salesman_attendance sa
+              LEFT JOIN salesman s ON sa.salesmanid = s.salesmanid
+              WHERE sa.attendance_date = ?
+              ORDER BY s.fullname`;
+
+            pool.query(query, [attendance_date], (error, result) => {
+                if (error) {
+                    console.error(error);
+                    return res.status(500).json({ status: false, message: "Database Error" });
+                }
+                res.status(200).json({ status: true, message: "Success", data: result });
+            });
         } else if (month && year) {
-            // Monthly view: get all records for the whole month
-            query = `SELECT 
-        sa.attendanceid,
-        sa.salesmanid,
-        s.fullname AS salesman_name,
-        DATE_FORMAT(sa.attendance_date, '%Y-%m-%d') AS attendance_date,
-        sa.status
-      FROM salesman_attendance sa
-      LEFT JOIN salesman s ON sa.salesmanid = s.salesmanid
-      WHERE MONTH(sa.attendance_date) = ? AND YEAR(sa.attendance_date) = ?
-      ORDER BY s.fullname`;
-            values = [month, year];
+            // Query 1: Get per-day attendance records for calendar
+            const detailQuery = `SELECT 
+                sa.salesmanid,
+                DATE_FORMAT(sa.attendance_date, '%Y-%m-%d') AS attendance_date,
+                sa.status
+              FROM salesman_attendance sa
+              WHERE MONTH(sa.attendance_date) = ? AND YEAR(sa.attendance_date) = ?`;
+
+            // Query 2: Get TP/TA totals per salesman
+            const summaryQuery = `SELECT 
+                s.salesmanid,
+                s.fullname AS salesman_name,
+                COALESCE(SUM(CASE WHEN sa.status = 'Present' THEN 1 ELSE 0 END), 0) AS total_present,
+                COALESCE(SUM(CASE WHEN sa.status = 'Absent' THEN 1 ELSE 0 END), 0) AS total_absent
+              FROM salesman s
+              LEFT JOIN salesman_attendance sa ON s.salesmanid = sa.salesmanid 
+                AND MONTH(sa.attendance_date) = ? AND YEAR(sa.attendance_date) = ?
+              GROUP BY s.salesmanid, s.fullname
+              ORDER BY s.fullname`;
+
+            // Execute both queries
+            pool.query(detailQuery, [month, year], (detailError, detailResult) => {
+                if (detailError) {
+                    console.error(detailError);
+                    return res.status(500).json({ status: false, message: "Database Error" });
+                }
+
+                pool.query(summaryQuery, [month, year], (summaryError, summaryResult) => {
+                    if (summaryError) {
+                        console.error(summaryError);
+                        return res.status(500).json({ status: false, message: "Database Error" });
+                    }
+
+                    // Merge summary with detail records
+                    const data = summaryResult.map(salesman => ({
+                        ...salesman,
+                        attendance_records: detailResult.filter(d => d.salesmanid === salesman.salesmanid)
+                    }));
+                    
+                    res.status(200).json({
+                        status: true,
+                        message: "Success",
+                        data: data
+                    });
+                });
+            });
         } else {
             return res.status(400).json({
                 status: false,
                 message: "Either attendance_date or (month and year) is required"
             });
         }
-
-        pool.query(query, values, (error, result) => {
-            if (error) {
-                console.error(error);
-                return res.status(500).json({ status: false, message: "Database Error" });
-            }
-            res.status(200).json({
-                status: true,
-                message: "Success",
-                count: result.length,
-                data: result
-            });
-        });
     } catch (e) {
         console.error(e);
         res.status(500).json({ status: false, message: "Technical Issue" });

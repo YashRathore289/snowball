@@ -68,7 +68,6 @@ export default function AccountManagement({ cacheKey }) {
         try {
             const result = await postData('handedgoods/retrieve-account-summary', {});
             if (result?.status) {
-                console.log('kzjdfbkjbf', result.data)
                 setSalesmen(result.data);
             }
         } catch (error) {
@@ -274,7 +273,7 @@ export default function AccountManagement({ cacheKey }) {
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                                                 <button
                                                     onClick={() => handleSalesmanClick(salesman)}
-                                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm cursor-pointer"
+                                                    className={`px-4 py-2 ${salesman.total_submit == '0.00' ? 'bg-blue-600 hover:bg-blue-700':'bg-red-600 hover:bg-red-700'} text-white rounded-lg transition-colors text-sm cursor-pointer`}
                                                 >
                                                     View Details
                                                 </button>
@@ -354,12 +353,12 @@ export default function AccountManagement({ cacheKey }) {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {entries.length === 0 ? (
+                                {entries.filter(entry => entry.clear_status !== 1).length === 0 ? (
                                     <tr>
                                         <td colSpan="4" className="px-4 py-6 text-center text-sm text-gray-500">No entries found</td>
                                     </tr>
                                 ) : (
-                                    entries.map((entry, idx) => (
+                                    entries.filter(entry => entry.clear_status !== 1).map((entry, idx) => (
                                         <tr key={idx} className={`hover:bg-gray-50 transition-colors ${entry.clear_status === 1 ? 'opacity-50' : ''}`}>
                                             <td className="px-4 py-3 text-sm text-gray-900">{entry.date}</td>
                                             <td className="px-4 py-3 text-sm font-semibold text-blue-600 text-right">
@@ -407,18 +406,21 @@ export default function AccountManagement({ cacheKey }) {
                         {/* 2. Return Amount */}
                         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                             <span className="text-sm font-medium text-gray-700">2. Return Amount</span>
-                            <input
-                                type="text"
-                                value={returnAmount}
-                                onChange={(e) => setReturnAmount(e.target.value)}
-                                placeholder="Enter amount"
-                                className="w-40 px-3 py-2 border border-gray-300 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                            <div className="flex items-center gap-8">
+                                <input
+                                    type="text"
+                                    value={returnAmount}
+                                    onChange={(e) => setReturnAmount(e.target.value)}
+                                    placeholder="Enter amount"
+                                    className="w-40 px-3 py-2 border border-gray-300 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <span className="text-lg font-bold text-blue-600">{formatAmount(returnValue)}</span>
+                            </div>
                         </div>
 
                         {/* 3. After Return */}
                         <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                            <span className="text-sm font-medium text-gray-700">3. After Return (1 - 2)</span>
+                            <span className="text-sm font-medium text-gray-700">3. After Return</span>
                             <span className="text-lg font-bold text-blue-600">{formatAmount(afterReturn)}</span>
                         </div>
 
@@ -436,7 +438,7 @@ export default function AccountManagement({ cacheKey }) {
 
                         {/* 5. After Commission */}
                         <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                            <span className="text-sm font-medium text-gray-700">5. After Commission (3 - 4)</span>
+                            <span className="text-sm font-medium text-gray-700">5. After Commission</span>
                             <span className="text-lg font-bold text-blue-600">{formatAmount(afterCommission)}</span>
                         </div>
 
@@ -448,7 +450,7 @@ export default function AccountManagement({ cacheKey }) {
 
                         {/* 7. Final Amount */}
                         <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-                            <span className="text-sm font-bold text-gray-700">7. Final Amount (5 - 6)</span>
+                            <span className="text-sm font-bold text-gray-700">7. Final Amount</span>
                             <span className={`text-xl font-bold ${finalBalance !== null && finalBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                 {formatAmount(finalBalance)}
                             </span>

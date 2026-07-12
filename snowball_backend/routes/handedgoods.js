@@ -330,16 +330,11 @@ router.post("/retrieve-account-summary", rateLimiter.high(), (req, res) => {
         s.salesmanid,
         s.fullname,
         s.mobileno,
-        COALESCE(SUM(CASE WHEN hg.clear_status != 1 OR hg.clear_status IS NULL THEN 
-          CAST(JSON_EXTRACT(hg.details, '$.items[*].total') AS DECIMAL(10,2))
-        ELSE 0 END), 0) AS total_items,
-        COALESCE(SUM(CASE WHEN hg.clear_status != 1 OR hg.clear_status IS NULL THEN 
-          hg.submit_amount 
-        ELSE 0 END), 0) AS total_submit,
-        CASE WHEN MAX(CASE WHEN hg.clear_status = 1 THEN 1 ELSE 0 END) = 1 THEN 1 ELSE 0 END AS has_cleared
+        hg.details,
+        hg.submit_amount,
+        hg.clear_status
       FROM salesman s
       LEFT JOIN handed_goods hg ON s.salesmanid = hg.salesmanid
-      GROUP BY s.salesmanid, s.fullname, s.mobileno
       ORDER BY s.fullname ASC
     `;
 
@@ -349,11 +344,49 @@ router.post("/retrieve-account-summary", rateLimiter.high(), (req, res) => {
         return res.status(500).json({ status: false, message: "Database Error" });
       }
 
+      // Process results in Node.js
+      const salesmenMap = {};
+      
+      result.forEach(row => {
+        if (!salesmenMap[row.salesmanid]) {
+          salesmenMap[row.salesmanid] = {
+            salesmanid: row.salesmanid,
+            fullname: row.fullname,
+            mobileno: row.mobileno,
+            total_items: 0,
+            total_submit: 0,
+            has_cleared: 0
+          };
+        }
+
+        // Parse details JSON
+        let details = row.details;
+        if (typeof details === 'string') {
+          try { details = JSON.parse(details); } catch(e) { details = null; }
+        }
+
+        const items = details?.items || [];
+        
+        // Skip cleared entries
+        if (row.clear_status === 1) {
+          salesmenMap[row.salesmanid].has_cleared = 1;
+        } else {
+          // Sum item totals
+          items.forEach(item => {
+            salesmenMap[row.salesmanid].total_items += parseFloat(item.total || 0) || 0;
+          });
+          // Add submit amount
+          salesmenMap[row.salesmanid].total_submit += parseFloat(row.submit_amount || 0) || 0;
+        }
+      });
+
+      const data = Object.values(salesmenMap);
+      
       return res.status(200).json({
         status: true,
         message: "Success",
-        count: result.length,
-        data: result
+        count: data.length,
+        data: data
       });
     });
   } catch (e) {
@@ -464,7 +497,6 @@ router.post("/save-settlement", rateLimiter.critical(), (req, res) => {
           return res.status(500).json({ status: false, message: "Database Error" });
         }
 
-        console.log(`Updated ${updateResult.affectedRows} entries to cleared for salesman ${salesmanid}`);
 
         // Step 2: Save settlement record
         const checkQuery = "SELECT settlementid FROM account_settlements WHERE salesmanid = ? ORDER BY createdat DESC LIMIT 1";

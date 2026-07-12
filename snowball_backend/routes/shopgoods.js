@@ -7,60 +7,78 @@ const rateLimiter = require('./rateLimiter');
 // ==================== 1. RETRIEVE SHOP GOODS ====================
 router.post("/retrieve-shop-goods", rateLimiter.high(), (req, res) => {
   try {
-    const { date, month, year } = req.body; // only these are sent by frontend
-
+    const { date, month, year } = req.body;
     let query;
     let values = [];
 
     if (date) {
-      query = `SELECT 
-        shopgoodsid,
-        shopownerid,
-        details,
-        DATE_FORMAT(date, '%Y-%m-%d') AS date,
-        commission,
-        finalamount
-      FROM shop_goods 
-      WHERE date = ?
-      ORDER BY shopownerid ASC`;
+      query = `
+        SELECT 
+          sg.shopgoodsid,
+          sg.shopownerid,
+          so.shopownername,
+          sg.details,
+          DATE_FORMAT(sg.date, '%Y-%m-%d') AS date,
+          sg.commission,
+          sg.finalamount
+        FROM shop_goods sg
+        LEFT JOIN shop_owners so
+          ON sg.shopownerid = so.shopownerid
+        WHERE sg.date = ?
+        ORDER BY sg.shopownerid ASC
+      `;
       values = [date];
     } else if (month && year) {
-      query = `SELECT 
-        shopgoodsid,
-        shopownerid,
-        details,
-        DATE_FORMAT(date, '%Y-%m-%d') AS date,
-        commission,
-        finalamount
-      FROM shop_goods 
-      WHERE MONTH(date) = ? AND YEAR(date) = ?
-      ORDER BY date DESC, shopownerid ASC`;
+      query = `
+        SELECT 
+          sg.shopgoodsid,
+          sg.shopownerid,
+          so.shopownername,
+          sg.details,
+          DATE_FORMAT(sg.date, '%Y-%m-%d') AS date,
+          sg.commission,
+          sg.finalamount
+        FROM shop_goods sg
+        LEFT JOIN shop_owners so
+          ON sg.shopownerid = so.shopownerid
+        WHERE MONTH(sg.date) = ? AND YEAR(sg.date) = ?
+        ORDER BY sg.date DESC, sg.shopownerid ASC
+      `;
       values = [month, year];
     } else {
-      // Should not happen, but fallback to all records ordered by date
-      query = `SELECT 
-        shopgoodsid,
-        shopownerid,
-        details,
-        DATE_FORMAT(date, '%Y-%m-%d') AS date,
-        commission,
-        finalamount
-      FROM shop_goods 
-      ORDER BY date DESC, shopownerid ASC`;
+      query = `
+        SELECT 
+          sg.shopgoodsid,
+          sg.shopownerid,
+          so.shopownername,
+          sg.details,
+          DATE_FORMAT(sg.date, '%Y-%m-%d') AS date,
+          sg.commission,
+          sg.finalamount
+        FROM shop_goods sg
+        LEFT JOIN shop_owners so
+          ON sg.shopownerid = so.shopownerid
+        ORDER BY sg.date DESC, sg.shopownerid ASC
+      `;
     }
 
     pool.query(query, values, (error, result) => {
       if (error) {
         console.error(error);
-        return res.status(500).json({ status: false, message: "Database Error" });
+        return res.status(500).json({
+          status: false,
+          message: "Database Error"
+        });
       }
 
-      // Parse details JSON for each record
       const parsedResult = result.map(record => ({
         ...record,
-        details: typeof record.details === 'string' ? JSON.parse(record.details) : record.details
+        details:
+          typeof record.details === "string"
+            ? JSON.parse(record.details)
+            : record.details
       }));
-
+      
       return res.status(200).json({
         status: true,
         message: "Success",
@@ -70,7 +88,10 @@ router.post("/retrieve-shop-goods", rateLimiter.high(), (req, res) => {
     });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ status: false, message: "Technical Issue" });
+    res.status(500).json({
+      status: false,
+      message: "Technical Issue"
+    });
   }
 });
 

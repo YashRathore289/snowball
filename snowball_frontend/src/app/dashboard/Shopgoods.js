@@ -72,7 +72,7 @@ export default function ShopGoodsManagement({ cacheKey }) {
     const [loadingLookups, setLoadingLookups] = useState(!cachedData);
     const [showRecords, setShowRecords] = useState(false);
     const [records, setRecords] = useState([]);
-    const [filterType, setFilterType] = useState('date');
+    const [filterType, setFilterType] = useState('month');
     const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
     const [filterYear, setFilterYear] = useState(new Date().getFullYear());
     const [loadingRecords, setLoadingRecords] = useState(false);
