@@ -364,7 +364,6 @@ export default function HandedGoodsManagement({ cacheKey }) {
   }, []);
 
   const getFinalAmount = useCallback((card) => {
-    if (card.editMode) return null;
     const itemsTotal = cardItemsTotal(card);
     const returnVal = getReturnValue(card) || 0;
     const commissionVal = parseFloat(card.commission) || 0;
@@ -454,12 +453,11 @@ export default function HandedGoodsManagement({ cacheKey }) {
       clear_status: card.clearStatus ? 1 : 0,
       submit_amount: parseFloat(card.submitAmount) || 0,
     };
+
     const isUpdate = card.handedgoodsid || card.isUpdateMode || card.editMode;
-    if (!isUpdate) {
-      if (card.commission !== '' && card.commission !== null && card.commission !== undefined) {
-        payload.finalamount = finalAmount;
-      }
-    }
+    payload.finalamount = (card.commission === '' || card.commission === null || card.commission === undefined)
+      ? 0
+      : finalAmount;
     if (isUpdate && card.handedgoodsid) { payload.handedgoodsid = card.handedgoodsid; }
     updateCard(card.cardid, { saving: true }, isEdit);
     try {
