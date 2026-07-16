@@ -86,14 +86,17 @@ router.post("/insert-handed-goods", rateLimiter.critical(), (req, res) => {
         return res.status(404).json({ status: false, message: "Salesman not found" });
       }
 
-      const finalAmt = finalamount !== undefined ? parseFloat(finalamount) : (parseFloat(returnamt) || 0) + (parseFloat(commission) || 0);
+      const returnAmt = (returnamt === null || returnamt === undefined || returnamt === '') ? null : returnamt;
+      const finalAmt = finalamount !== undefined
+        ? (finalamount === null ? 0 : parseFloat(finalamount))
+        : (parseFloat(returnamt) || 0) + (parseFloat(commission) || 0);
       const clearVal = clear_status !== undefined ? (clear_status ? 1 : 0) : 0;
       const submitAmt = submit_amount !== undefined ? parseFloat(submit_amount) : 0;
 
       const query = `INSERT INTO handed_goods 
-        (salesmanid, details, date, returnamt, commission, finalamount, clear_status, submit_amount, createdat, updatedat) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`;
-      const values = [salesmanid, details, date, parseFloat(returnamt) || 0, parseFloat(commission) || 0, finalAmt, clearVal, submitAmt];
+  (salesmanid, details, date, returnamt, commission, finalamount, clear_status, submit_amount, createdat, updatedat) 
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`;
+      const values = [salesmanid, details, date, returnAmt, parseFloat(commission) || 0, finalAmt, clearVal, submitAmt];
 
       pool.query(query, values, (error, insertResult) => {
         if (error) {
@@ -145,14 +148,14 @@ router.post("/update-handed-goods", rateLimiter.critical(), (req, res) => {
     if (salesmanid !== undefined) { updateFields.push('salesmanid = ?'); values.push(salesmanid); }
     if (details !== undefined) { updateFields.push('details = ?'); values.push(details); }
     if (date !== undefined) { updateFields.push('date = ?'); values.push(date); }
-    if (returnamt !== undefined) { updateFields.push('returnamt = ?'); values.push(parseFloat(returnamt)); }
-    if (commission !== undefined) { updateFields.push('commission = ?'); values.push(parseFloat(commission)); }
+    if (returnamt !== undefined) { updateFields.push('returnamt = ?'); values.push(returnamt === null || returnamt === '' ? null : returnamt); }
+    if (commission !== undefined) { updateFields.push('commission = ?'); values.push(commission === null ? null : parseFloat(commission)); }
     if (clear_status !== undefined) { updateFields.push('clear_status = ?'); values.push(clear_status ? 1 : 0); }
     if (submit_amount !== undefined) { updateFields.push('submit_amount = ?'); values.push(parseFloat(submit_amount)); }
 
     if (finalamount !== undefined) {
       updateFields.push('finalamount = ?');
-      values.push(parseFloat(finalamount));
+      values.push(finalamount === null ? null : parseFloat(finalamount));
     }
 
     proceedUpdate();
@@ -346,7 +349,7 @@ router.post("/retrieve-account-summary", rateLimiter.high(), (req, res) => {
 
       // Process results in Node.js
       const salesmenMap = {};
-      
+
       result.forEach(row => {
         if (!salesmenMap[row.salesmanid]) {
           salesmenMap[row.salesmanid] = {
@@ -362,11 +365,11 @@ router.post("/retrieve-account-summary", rateLimiter.high(), (req, res) => {
         // Parse details JSON
         let details = row.details;
         if (typeof details === 'string') {
-          try { details = JSON.parse(details); } catch(e) { details = null; }
+          try { details = JSON.parse(details); } catch (e) { details = null; }
         }
 
         const items = details?.items || [];
-        
+
         // Skip cleared entries
         if (row.clear_status === 1) {
           salesmenMap[row.salesmanid].has_cleared = 1;
@@ -381,7 +384,7 @@ router.post("/retrieve-account-summary", rateLimiter.high(), (req, res) => {
       });
 
       const data = Object.values(salesmenMap);
-      
+
       return res.status(200).json({
         status: true,
         message: "Success",

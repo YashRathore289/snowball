@@ -430,8 +430,10 @@ export default function HandedGoodsManagement({ cacheKey }) {
       return r.productid && r.qty && r.price;
     });
     if (validRows.length === 0) { showToast('Add at least one item with name, quantity and price'); return; }
+    const returnBlank = !card.returnExpr || card.returnExpr.trim() === '';
     const returnVal = getReturnValue(card);
-    if (returnVal === null) { showToast('Return amount expression is invalid'); return; }
+    if (!returnBlank && returnVal === null) { showToast('Return amount expression is invalid'); return; }
+    const commissionBlank = card.commission === '' || card.commission === null || card.commission === undefined;
     const finalAmount = getFinalAmountForDB(card);
     const saveDate = card.handedgoodsid ? (card.cardDate || date) : date;
     const payload = {
@@ -448,16 +450,17 @@ export default function HandedGoodsManagement({ cacheKey }) {
           return { productid: r.productid, productname: r.productname, qty: parseFloat(r.qty), price: parseFloat(r.price), total: rowTotal(r) };
         })
       }),
-      returnamt: returnVal,
+      returnamt: returnBlank ? null : (card.returnExpr || ''),
       commission: parseFloat(card.commission) || 0,
       clear_status: card.clearStatus ? 1 : 0,
       submit_amount: parseFloat(card.submitAmount) || 0,
     };
-
     const isUpdate = card.handedgoodsid || card.isUpdateMode || card.editMode;
-    payload.finalamount = (card.commission === '' || card.commission === null || card.commission === undefined)
-      ? 0
-      : finalAmount;
+
+    // Only set finalamount if it's a valid finite number AND both commission and return were actually entered
+    const rawFinal = (commissionBlank || returnBlank) ? null : finalAmount;
+    payload.finalamount = (rawFinal === null || typeof rawFinal !== 'number' || !isFinite(rawFinal)) ? 0 : rawFinal;
+
     if (isUpdate && card.handedgoodsid) { payload.handedgoodsid = card.handedgoodsid; }
     updateCard(card.cardid, { saving: true }, isEdit);
     try {
@@ -500,7 +503,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
       isAllBig: item.isAllBig || false,
       allBigExpr: item.allBigExpr || '',
     })) || [emptyRow()];
-    newCardData.returnExpr = String(record.returnExpr === '0.00' ? 0 : record.returnExpr || '');;
+    newCardData.returnExpr = String(record.returnamt || '');
     newCardData.commission = String(record.commission === '0.00' ? '' : record.commission || '');
     newCardData.clearStatus = record.clear_status === 1;
     newCardData.submitAmount = String(record.submit_amount === '0.00' ? '' : record.submit_amount || '');
@@ -727,7 +730,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{record.salesman_name}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{record.details?.batteries?.length > 0 ? record.details.batteries.join(', ') : '-'}</td>
                         <td className="px-4 py-3 text-sm font-semibold text-blue-600 text-right">₹{totalItemAmount.toFixed(0)}</td>
-                        <td className="px-4 py-3 text-sm text-right">₹{parseFloat(record.returnamt || 0).toFixed(0)}</td>
+                        <td className="px-4 py-3 text-sm text-right">₹{(evaluateExpression(record.returnamt) || 0).toFixed(0)}</td>
                         <td className="px-4 py-3 text-sm text-right">₹{parseFloat(record.commission || 0).toFixed(0)}</td>
                         <td className="px-4 py-3 text-sm font-semibold text-green-600 text-right">₹{parseFloat(record.submit_amount || 0).toFixed(0)}</td>
                         <td className="px-4 py-3 text-sm font-semibold text-blue-600 text-right">₹{parseFloat(record.finalamount || 0).toFixed(0)}</td>
