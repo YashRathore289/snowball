@@ -450,7 +450,7 @@ export default function HandedGoodsManagement({ cacheKey }) {
           return { productid: r.productid, productname: r.productname, qty: parseFloat(r.qty), price: parseFloat(r.price), total: rowTotal(r) };
         })
       }),
-      returnamt: returnBlank ? null : (card.returnExpr || ''),
+      returnamt: returnBlank ? 0 : (card.returnExpr || 0),
       commission: parseFloat(card.commission) || 0,
       clear_status: card.clearStatus ? 1 : 0,
       submit_amount: parseFloat(card.submitAmount) || 0,
