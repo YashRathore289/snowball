@@ -344,10 +344,10 @@ export default function SalesmanDetails({ cacheKey }) {
     // Filter by name only
     const filteredSalesmen = useMemo(() => {
         if (!searchTerm.trim()) return salesmen;
-        
+
         const term = searchTerm.toLowerCase().trim();
-        
-        return salesmen.filter(s => 
+
+        return salesmen.filter(s =>
             s.fullname?.toLowerCase().includes(term)
         );
     }, [salesmen, searchTerm]);
@@ -367,9 +367,8 @@ export default function SalesmanDetails({ cacheKey }) {
                             </div>
                             <div>
                                 <h2 className="text-xl font-semibold text-white">
-                                    {isAddMode ? 'Add New Salesman' : (isEditMode ? 'Edit Salesman' : 'Salesman Details')}
+                                    {isAddMode ? 'Add New Salesman' : (isEditMode ? 'Edit Salesman' : selectedSalesman?.fullname)}
                                 </h2>
-                                {!isAddMode && <p className="text-sm text-blue-100">{selectedSalesman?.fullname}</p>}
                             </div>
                         </div>
                         <button onClick={() => setIsModalOpen(false)} className="text-white hover:text-gray-200 transition-colors cursor-pointer">
@@ -544,7 +543,7 @@ export default function SalesmanDetails({ cacheKey }) {
                 </div>
             );
         }
-        
+
         if (filteredSalesmen.length === 0) {
             return (
                 <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
@@ -552,7 +551,7 @@ export default function SalesmanDetails({ cacheKey }) {
                         {searchTerm ? `No salesmen found with name "${searchTerm}"` : 'No salesmen found'}
                     </p>
                     {searchTerm && (
-                        <button 
+                        <button
                             onClick={() => setSearchTerm('')}
                             className="mt-2 text-blue-600 hover:text-blue-800 underline"
                         >
@@ -562,26 +561,26 @@ export default function SalesmanDetails({ cacheKey }) {
                 </div>
             );
         }
-        
+
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
                 {filteredSalesmen.map(salesman => (
-                    <div 
-                        key={salesman.salesmanid} 
-                        onClick={() => handleCardClick(salesman)} 
+                    <div
+                        key={salesman.salesmanid}
+                        onClick={() => handleCardClick(salesman)}
                         className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-all cursor-pointer hover:border-blue-400"
                     >
                         <div className="flex flex-col items-center">
                             <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-3xl font-bold mb-3 overflow-hidden">
                                 {salesman.photo ? (
-                                    <img 
-                                        src={salesman.photo} 
-                                        alt={salesman.fullname} 
-                                        className="w-full h-full object-cover" 
-                                        onError={(e) => { 
-                                            e.target.style.display = 'none'; 
-                                            e.target.parentElement.innerHTML = salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'; 
-                                        }} 
+                                    <img
+                                        src={salesman.photo}
+                                        alt={salesman.fullname}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                            e.target.style.display = 'none';
+                                            e.target.parentElement.innerHTML = salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?';
+                                        }}
                                     />
                                 ) : (
                                     salesman.fullname ? salesman.fullname.charAt(0).toUpperCase() : '?'
@@ -603,7 +602,7 @@ export default function SalesmanDetails({ cacheKey }) {
                     <button onClick={() => setToastVisible(false)} className="text-white hover:text-gray-200 font-bold text-lg leading-none cursor-pointer">×</button>
                 </div>
             )}
-            
+
             {confirmVisible && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
                     <div className="bg-white rounded-xl shadow-2xl p-6 w-96 max-w-[90%]">
@@ -616,50 +615,51 @@ export default function SalesmanDetails({ cacheKey }) {
                     </div>
                 </div>
             )}
-            
+
             <div className="mb-8">
                 <div className="flex justify-between items-center mb-4">
                     <div>
                         <h2 className="text-2xl font-semibold text-gray-900">Salesman Details</h2>
                         <p className="text-sm text-gray-500 mt-1">Manage and view all salesman information</p>
                     </div>
-                    <button 
-                        onClick={handleAddClick} 
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        Add Salesman
-                    </button>
-                </div>
-                
-                <div className="mb-4">
-                    <div className="relative">
-                        <input
-                            type="text"
-                            placeholder="Search by name..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                        />
-                        <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                        {searchTerm && (
-                            <button
-                                onClick={() => setSearchTerm('')}
-                                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 cursor-pointer"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        )}
+                    {/* Move search bar here, before Add Salesman button */}
+                    <div className="flex items-center gap-3">
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder="Search by name..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full px-4 py-2 pl-10 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                            />
+                            <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 cursor-pointer"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
+                        <button
+                            onClick={handleAddClick}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            Add Salesman
+                        </button>
                     </div>
                 </div>
+
             </div>
-            
+
             {renderSalesmanCards()}
             {renderModal()}
         </div>

@@ -231,13 +231,25 @@ export default function AccountManagement({ cacheKey }) {
         return (
             <div>
                 <div className="mb-4">
-                    <input
-                        type="text"
-                        placeholder="Search salesman by name or mobile..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    <div className="relative w-full max-w-[30%]">
+                        <input
+                            type="text"
+                            placeholder="Search salesman by name or mobile..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm('')}
+                                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 cursor-pointer"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {filteredSalesmen.length === 0 ? (
@@ -273,7 +285,7 @@ export default function AccountManagement({ cacheKey }) {
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                                                 <button
                                                     onClick={() => handleSalesmanClick(salesman)}
-                                                    className={`px-4 py-2 ${salesman.total_submit == '0.00' ? 'bg-blue-600 hover:bg-blue-700':'bg-red-600 hover:bg-red-700'} text-white rounded-lg transition-colors text-sm cursor-pointer`}
+                                                    className={`px-4 py-2 ${salesman.total_submit == '0.00' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'} text-white rounded-lg transition-colors text-sm cursor-pointer`}
                                                 >
                                                     View Details
                                                 </button>

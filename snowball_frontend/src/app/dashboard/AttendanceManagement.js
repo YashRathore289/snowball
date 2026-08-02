@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { postData } from '@/Services';
 import { saveCache, getCache, clearCache } from './ComponentCache';
 
@@ -20,6 +20,8 @@ export default function AttendanceManagement({ cacheKey }) {
     const [confirmVisible, setConfirmVisible] = useState(false);
     const [confirmMessage, setConfirmMessage] = useState('');
     const [confirmAction, setConfirmAction] = useState(null);
+    const [marking, setMarking] = useState({});
+    const markingRef = useRef({});
 
     useEffect(() => {
         if (!toastVisible) return;
@@ -76,6 +78,11 @@ export default function AttendanceManagement({ cacheKey }) {
     }, [selectedDate, currentMonth, currentYear, viewMode]);
 
     const markAttendance = useCallback(async (salesmanid, status) => {
+        if (markingRef.current[salesmanid]) return;
+
+        markingRef.current[salesmanid] = true;
+        setMarking(prev => ({ ...prev, [salesmanid]: true }));
+
         try {
             const result = await postData('attendance/mark-attendance', {
                 salesmanid,
@@ -97,6 +104,12 @@ export default function AttendanceManagement({ cacheKey }) {
         } catch (error) {
             console.error('Error marking attendance:', error);
             showToast('Error marking attendance');
+        } finally {
+            // Clear marking after API call completes
+            setTimeout(() => {
+                markingRef.current[salesmanid] = false;
+                setMarking(prev => ({ ...prev, [salesmanid]: false }));
+            }, 100);
         }
     }, [selectedDate, showToast, cacheKey, fetchSalesmen]);
 
@@ -320,13 +333,25 @@ export default function AttendanceManagement({ cacheKey }) {
                         ▶
                     </button>
                     {/* Search Bar */}
-                    <input
-                        type="text"
-                        placeholder="Search salesman..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
-                    />
+                    <div className="relative">
+                        <input
+                            type="text"
+                            placeholder="Search salesman..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+                        />
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm('')}
+                                className="absolute right-2 top-3 text-gray-400 hover:text-gray-600 cursor-pointer"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
                     {/* Absent All Button */}
                     <button
                         onClick={handleAbsentAll}
@@ -369,42 +394,44 @@ export default function AttendanceManagement({ cacheKey }) {
                                     const record = dailyAttendanceMap[salesman.salesmanid];
                                     const status = record?.status || 'Not Marked';
                                     const attendanceId = record?.attendanceid;
+                                    const isMarking = marking[salesman.salesmanid];
 
                                     return (
                                         <tr key={salesman.salesmanid} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{salesman.fullname}</td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadge(status)}`}>
-                                                    {status}
+                                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadge(isMarking ? 'Marking...' : status)}`}>
+                                                    {isMarking ? 'Marking...' : status}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm">
                                                 <div className="flex gap-2">
                                                     <button
                                                         onClick={() => markAttendance(salesman.salesmanid, 'Present')}
-                                                        className={`px-3 py-1 rounded-lg transition-colors text-xs font-medium cursor-pointer ${status === 'Present'
-                                                            ? 'bg-green-200 text-green-800 cursor-default'
-                                                            : 'bg-green-600 hover:bg-green-700 text-white'
+                                                        disabled={status === 'Present' || isMarking}
+                                                        className={`px-3 py-1 rounded-lg transition-colors text-xs font-medium ${status === 'Present' || isMarking
+                                                            ? 'bg-green-200 text-green-800 cursor-not-allowed opacity-60'
+                                                            : 'bg-green-600 hover:bg-green-700 text-white cursor-pointer'
                                                             }`}
-                                                        disabled={status === 'Present'}
                                                     >
                                                         Present
                                                     </button>
                                                     <button
                                                         onClick={() => markAttendance(salesman.salesmanid, 'Absent')}
-                                                        className={`px-3 py-1 rounded-lg transition-colors text-xs font-medium cursor-pointer ${status === 'Absent'
-                                                            ? 'bg-red-200 text-red-800 cursor-default'
-                                                            : 'bg-red-600 hover:bg-red-700 text-white'
+                                                        disabled={status === 'Absent' || isMarking}
+                                                        className={`px-3 py-1 rounded-lg transition-colors text-xs font-medium ${status === 'Absent' || isMarking
+                                                            ? 'bg-red-200 text-red-800 cursor-not-allowed opacity-60'
+                                                            : 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
                                                             }`}
-                                                        disabled={status === 'Absent'}
                                                     >
                                                         Absent
                                                     </button>
                                                     {attendanceId && (
                                                         <button
                                                             onClick={() => handleDelete(attendanceId)}
-                                                            className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors cursor-pointer"
+                                                            disabled={isMarking}
+                                                            className={`px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded-lg transition-colors ${isMarking ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                                                         >
                                                             Clear
                                                         </button>
@@ -420,7 +447,7 @@ export default function AttendanceManagement({ cacheKey }) {
                 </div>
             </div>
         </div>
-    ), [selectedDate, searchTerm, filteredSalesmen, dailyAttendanceMap, getStatusBadge, markAttendance, handleDelete, attendance, dailySummary, handleClearAll]);
+    ), [selectedDate, searchTerm, filteredSalesmen, dailyAttendanceMap, getStatusBadge, markAttendance, handleDelete, attendance, dailySummary, handleClearAll, marking]);
 
     const renderMonthlyView = useCallback(() => (
         <div>
