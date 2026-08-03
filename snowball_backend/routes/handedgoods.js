@@ -358,9 +358,12 @@ router.post("/retrieve-account-summary", rateLimiter.high(), (req, res) => {
             mobileno: row.mobileno,
             total_items: 0,
             total_submit: 0,
-            has_cleared: 0
+            has_pending: false // 👈 CHANGED: Track if has pending entries
           };
         }
+
+        // Skip if no handed_goods record (LEFT JOIN returns null)
+        if (!row.details) return;
 
         // Parse details JSON
         let details = row.details;
@@ -368,22 +371,27 @@ router.post("/retrieve-account-summary", rateLimiter.high(), (req, res) => {
           try { details = JSON.parse(details); } catch (e) { details = null; }
         }
 
-        const items = details?.items || [];
+        if (!details || !details.items) return;
 
-        // Skip cleared entries
-        if (row.clear_status === 1) {
-          salesmenMap[row.salesmanid].has_cleared = 1;
-        } else {
+        // Only count non-cleared entries
+        if (row.clear_status === 0) {
+          salesmenMap[row.salesmanid].has_pending = true; // 👈 CHANGED: Mark as pending
+
           // Sum item totals
-          items.forEach(item => {
-            salesmenMap[row.salesmanid].total_items += parseFloat(item.total || 0) || 0;
+          details.items.forEach(item => {
+            const qty = parseFloat(item.qty) || 0;
+            const price = parseFloat(item.price) || 0;
+            const total = parseFloat(item.total) || (qty * price);
+            salesmenMap[row.salesmanid].total_items += total;
           });
+
           // Add submit amount
           salesmenMap[row.salesmanid].total_submit += parseFloat(row.submit_amount || 0) || 0;
         }
       });
 
-      const data = Object.values(salesmenMap);
+      // 👈 CHANGED: Only return salesmen with pending entries
+      const data = Object.values(salesmenMap).filter(s => s.has_pending);
 
       return res.status(200).json({
         status: true,
@@ -490,18 +498,25 @@ router.post("/save-settlement", rateLimiter.critical(), (req, res) => {
       return res.status(400).json({ status: false, message: "Salesman ID is required" });
     }
 
+    const settlementDate = new Date().toISOString().split('T')[0];
+
     // Step 1: Set clear_status = 1 for all currently uncleared entries
+    // 👈 CHANGED: Also update finalamount and submit_amount for today's entries
     pool.query(
-      "UPDATE handed_goods SET clear_status = 1, updatedat = NOW() WHERE salesmanid = ? AND clear_status = 0",
-      [salesmanid],
+      `UPDATE handed_goods 
+       SET clear_status = 1, 
+           finalamount = CASE WHEN date = ? THEN ? ELSE finalamount END,
+           submit_amount = CASE WHEN date = ? THEN ? ELSE submit_amount END,
+           updatedat = NOW() 
+       WHERE salesmanid = ? AND clear_status = 0`,
+      [settlementDate, final_balance || 0, settlementDate, final_balance || 0, salesmanid],
       (err, updateResult) => {
         if (err) {
           console.error(err);
           return res.status(500).json({ status: false, message: "Database Error" });
         }
 
-
-        // Step 2: Save settlement record
+        // Save to account_settlements
         const checkQuery = "SELECT settlementid FROM account_settlements WHERE salesmanid = ? ORDER BY createdat DESC LIMIT 1";
 
         pool.query(checkQuery, [salesmanid], (err, checkResult) => {
@@ -509,8 +524,6 @@ router.post("/save-settlement", rateLimiter.critical(), (req, res) => {
             console.error(err);
             return res.status(500).json({ status: false, message: "Database Error" });
           }
-
-          const settlementDate = new Date().toISOString().split('T')[0];
 
           if (checkResult.length > 0) {
             // Update existing settlement

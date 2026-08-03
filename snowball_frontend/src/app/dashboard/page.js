@@ -82,13 +82,16 @@ export default function Dashboard() {
     const [activeTab, setActiveTab] = useState('home');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [user, setUser] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const storedUser = sessionStorage.getItem("user");
         if (!storedUser) {
-            window.location.href = '/login'
+            window.location.href = '/login';
+            return;
         }
         setUser(JSON.parse(storedUser));
+        setIsLoading(false); // 👈 NEW: Set loading to false after auth check
     }, []);
 
     const toggleSidebar = useCallback(() => {
@@ -104,6 +107,18 @@ export default function Dashboard() {
         [activeTab]
     );
 
+    // 👈 NEW: Show loading spinner while checking authentication
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-gray-50">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="mt-4 text-gray-600 font-medium">Loading...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="flex h-screen bg-gray-50">
             {/* Sidebar */}
@@ -114,11 +129,11 @@ export default function Dashboard() {
                             <div className="w-14 h-14 rounded-lg flex items-center justify-center overflow-hidden">
                                 <img src='yash.jpeg' className='object-cover w-auto' />
                             </div>
-                            <h1 className="text-xl font-semibold text-gray-900">Snow Ball</h1>
+                            <h1 className="text-sm font-semibold text-gray-900">{user?.username}</h1>
                         </div>
                     ) : (
                         <div className="w-14 h-14 rounded-lg flex items-center justify-center mx-auto overflow-hidden">
-                            <span className="text-white font-bold text-sm w-full h-10 overflow-hidden"><img src='yash.jpeg'/></span>
+                            <span className="text-white font-bold text-sm w-full h-10 overflow-hidden"><img src='yash.jpeg' /></span>
                         </div>
                     )}
                     <button
@@ -152,14 +167,14 @@ export default function Dashboard() {
                                 <span className="text-sm font-medium text-gray-700"><img src='snowball.png' /></span>
                             </div>
                             <div className="ml-3">
-                                <p className="text-sm font-medium text-gray-900">{user?.username}</p>
+                                <p className="text-sm font-medium text-gray-900">Snow Ball</p>
                                 <p className="text-xs text-gray-500">{user?.email}</p>
                             </div>
                         </div>
                     ) : (
                         <div className="flex justify-center">
                             <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                                <span className="text-sm font-medium text-gray-700">{user?.username?.[0]?.toUpperCase()}</span>
+                                <span className="text-sm font-medium text-gray-700"><img src='snowball.png' /></span>
                             </div>
                         </div>
                     )}

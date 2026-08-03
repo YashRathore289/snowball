@@ -63,12 +63,23 @@ export default function AccountManagement({ cacheKey }) {
         return filtered;
     }, [salesmen, searchTerm]);
 
-    const fetchSalesmen = useCallback(async () => {
+    const fetchSalesmen = useCallback(async (from_date = '', to_date = '') => {
         setLoading(true);
         try {
-            const result = await postData('handedgoods/retrieve-account-summary', {});
-            if (result?.status) {
-                setSalesmen(result.data);
+            // 👈 CHANGED: Use different API based on whether date filter is applied
+            if (from_date && to_date) {
+                const result = await postData('handedgoods/retrieve-account-summary-filtered', {
+                    from_date,
+                    to_date
+                });
+                if (result?.status) {
+                    setSalesmen(result.data);
+                }
+            } else {
+                const result = await postData('handedgoods/retrieve-account-summary', {});
+                if (result?.status) {
+                    setSalesmen(result.data);
+                }
             }
         } catch (error) {
             console.error('Error fetching salesmen:', error);
@@ -311,6 +322,14 @@ export default function AccountManagement({ cacheKey }) {
             );
         }
 
+        // Separate pending and cleared entries
+        const pendingEntries = entries.filter(entry => entry.clear_status !== 1);
+        const clearedEntries = entries.filter(entry => entry.clear_status === 1);
+
+        // Calculate cleared totals
+        const clearedItemTotal = clearedEntries.reduce((sum, entry) => sum + (parseFloat(entry.item_total) || 0), 0);
+        const clearedSubmitTotal = clearedEntries.reduce((sum, entry) => sum + (parseFloat(entry.submit_amount) || 0), 0);
+
         return (
             <div>
                 <div className="flex items-center justify-between mb-6">
@@ -349,11 +368,24 @@ export default function AccountManagement({ cacheKey }) {
                         >
                             Apply Filter
                         </button>
+                        <button
+                            onClick={() => {
+                                setFromDate('');
+                                setToDate('');
+                                fetchSalesmanEntries(selectedSalesman.salesmanid);
+                            }}
+                            className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-sm cursor-pointer"
+                        >
+                            Clear Filter
+                        </button>
                     </div>
                 </div>
 
-                {/* Entries Table */}
+                {/* Pending Entries Table */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+                    <div className="px-4 py-3 bg-yellow-50 border-b border-yellow-200">
+                        <h4 className="text-sm font-semibold text-yellow-800">Pending Entries</h4>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
@@ -361,33 +393,33 @@ export default function AccountManagement({ cacheKey }) {
                                     <th className="px-4 py-3 text-left text-xs text-black uppercase tracking-wider font-extrabold">Date</th>
                                     <th className="px-4 py-3 text-right text-xs text-black uppercase tracking-wider font-extrabold">Item Total</th>
                                     <th className="px-4 py-3 text-right text-xs text-black uppercase tracking-wider font-extrabold">Submit Amount</th>
-                                    <th className="px-4 py-3 text-center text-xs text-black uppercase tracking-wider font-extrabold">Clear</th>
+                                    <th className="px-4 py-3 text-center text-xs text-black uppercase tracking-wider font-extrabold">Status</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {entries.filter(entry => entry.clear_status !== 1).length === 0 ? (
+                                {pendingEntries.length === 0 ? (
                                     <tr>
-                                        <td colSpan="4" className="px-4 py-6 text-center text-sm text-gray-500">No entries found</td>
+                                        <td colSpan="4" className="px-4 py-6 text-center text-sm text-gray-500">No pending entries found</td>
                                     </tr>
                                 ) : (
-                                    entries.filter(entry => entry.clear_status !== 1).map((entry, idx) => (
-                                        <tr key={idx} className={`hover:bg-gray-50 transition-colors ${entry.clear_status === 1 ? 'opacity-50' : ''}`}>
+                                    pendingEntries.map((entry, idx) => (
+                                        <tr key={`pending-${idx}`} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-4 py-3 text-sm text-gray-900">{entry.date}</td>
                                             <td className="px-4 py-3 text-sm font-semibold text-blue-600 text-right">
-                                                {entry.clear_status === 1 ? '₹0' : `₹${parseFloat(entry.item_total || 0).toFixed(0)}`}
+                                                ₹{parseFloat(entry.item_total || 0).toFixed(0)}
                                             </td>
                                             <td className="px-4 py-3 text-sm font-semibold text-green-600 text-right">
-                                                {entry.clear_status === 1 ? '₹0' : `₹${parseFloat(entry.submit_amount || 0).toFixed(0)}`}
+                                                ₹{parseFloat(entry.submit_amount || 0).toFixed(0)}
                                             </td>
                                             <td className="px-4 py-3 text-sm text-center">
-                                                {entry.clear_status === 1 ? '✅' : '❌'}
+                                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-700">Pending</span>
                                             </td>
                                         </tr>
                                     ))
                                 )}
                             </tbody>
-                            {entries.length > 0 && (
-                                <tfoot className="bg-gray-50 font-semibold">
+                            {pendingEntries.length > 0 && (
+                                <tfoot className="bg-yellow-50 font-semibold">
                                     <tr>
                                         <td className="px-4 py-3 text-sm text-gray-900">Total</td>
                                         <td className="px-4 py-3 text-sm text-blue-700 text-right">
@@ -404,7 +436,58 @@ export default function AccountManagement({ cacheKey }) {
                     </div>
                 </div>
 
-                {/* Settlement Calculation */}
+                {/* 👈 NEW: Cleared Entries Table - Shows when date filter is applied */}
+                {fromDate && toDate && clearedEntries.length > 0 && (
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+                        <div className="px-4 py-3 bg-green-50 border-b border-green-200">
+                            <h4 className="text-sm font-semibold text-green-800">
+                                Cleared Entries ({fromDate} to {toDate})
+                            </h4>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-xs text-black uppercase tracking-wider font-extrabold">Date</th>
+                                        <th className="px-4 py-3 text-right text-xs text-black uppercase tracking-wider font-extrabold">Item Total</th>
+                                        <th className="px-4 py-3 text-right text-xs text-black uppercase tracking-wider font-extrabold">Submit Amount</th>
+                                        <th className="px-4 py-3 text-center text-xs text-black uppercase tracking-wider font-extrabold">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {clearedEntries.map((entry, idx) => (
+                                        <tr key={`cleared-${idx}`} className="hover:bg-gray-50 transition-colors opacity-75">
+                                            <td className="px-4 py-3 text-sm text-gray-500">{entry.date}</td>
+                                            <td className="px-4 py-3 text-sm font-semibold text-gray-400 text-right">
+                                                ₹{parseFloat(entry.item_total || 0).toFixed(0)}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm font-semibold text-gray-400 text-right">
+                                                ₹{parseFloat(entry.submit_amount || 0).toFixed(0)}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-center">
+                                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">Cleared</span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot className="bg-green-50 font-semibold">
+                                    <tr>
+                                        <td className="px-4 py-3 text-sm text-gray-900">Total</td>
+                                        <td className="px-4 py-3 text-sm text-green-700 text-right">
+                                            ₹{clearedItemTotal.toFixed(0)}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-green-700 text-right">
+                                            ₹{clearedSubmitTotal.toFixed(0)}
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {/* Settlement Calculation - Only for pending entries */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Settlement Calculation</h3>
 

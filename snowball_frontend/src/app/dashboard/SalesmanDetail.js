@@ -1,7 +1,8 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { postData } from '@/Services';
 import { saveCache, getCache, clearCache } from './ComponentCache';
+import Cropper from 'react-easy-crop';
 
 const FIELDS = [
     { key: 'salesmanid', label: 'Salesman ID', editable: false, addMode: false },
@@ -91,6 +92,12 @@ export default function SalesmanDetails({ cacheKey }) {
     const [confirmVisible, setConfirmVisible] = useState(false);
     const [confirmMessage, setConfirmMessage] = useState('');
     const [confirmAction, setConfirmAction] = useState(null);
+
+    // Crop states
+    const [cropState, setCropState] = useState({ open: false, field: null, image: null });
+    const [crop, setCrop] = useState({ x: 0, y: 0 });
+    const [zoom, setZoom] = useState(1);
+    const croppedAreaPixelsRef = useRef(null);
 
     useEffect(() => {
         if (!toastVisible) return;
@@ -220,17 +227,67 @@ export default function SalesmanDetails({ cacheKey }) {
         return Object.keys(errors).length === 0;
     }, [formData]);
 
+    // Image change handler with crop
     const handleImageChange = useCallback((e, fieldName) => {
         const file = e.target.files[0];
-        if (file) {
-            setImageFiles(prev => ({ ...prev, [fieldName]: file }));
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setImagePreviews(prev => ({ ...prev, [fieldName]: reader.result }));
-            };
-            reader.readAsDataURL(file);
-        }
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setCropState({ open: true, field: fieldName, image: reader.result });
+            setCrop({ x: 0, y: 0 });
+            setZoom(1);
+            croppedAreaPixelsRef.current = null;
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
     }, []);
+
+    // Crop handlers
+    const onCropComplete = useCallback((_, croppedAreaPixels) => {
+        croppedAreaPixelsRef.current = croppedAreaPixels;
+    }, []);
+
+    const handleCropSave = useCallback(() => {
+        const { image, field } = cropState;
+        const pixels = croppedAreaPixelsRef.current;
+        if (!image || !pixels) return;
+
+        const canvas = document.createElement('canvas');
+        const img = new Image();
+        img.src = image;
+
+        img.onload = () => {
+            const maxSize = 800;
+            let { width, height } = pixels;
+            if (width > maxSize || height > maxSize) {
+                const ratio = Math.min(maxSize / width, maxSize / height);
+                width *= ratio;
+                height *= ratio;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, pixels.x, pixels.y, pixels.width, pixels.height, 0, 0, width, height);
+
+            const quality = field === 'idproof' ? 0.85 : 0.75;
+            canvas.toBlob((blob) => {
+                const file = new File([blob], `${field}.jpg`, { type: 'image/jpeg' });
+                setImageFiles(prev => ({ ...prev, [field]: file }));
+            }, 'image/jpeg', quality);
+
+            const previewCanvas = document.createElement('canvas');
+            const previewSize = 200;
+            previewCanvas.width = previewSize;
+            previewCanvas.height = previewSize;
+            const pCtx = previewCanvas.getContext('2d');
+            pCtx.drawImage(img, pixels.x, pixels.y, pixels.width, pixels.height, 0, 0, previewSize, previewSize);
+            setImagePreviews(prev => ({ ...prev, [field]: previewCanvas.toDataURL('image/jpeg', 0.6) }));
+        };
+
+        setCropState({ open: false, field: null, image: null });
+    }, [cropState]);
 
     const handleRemoveImage = useCallback((fieldName) => {
         setImageFiles(prev => ({ ...prev, [fieldName]: null }));
@@ -344,9 +401,7 @@ export default function SalesmanDetails({ cacheKey }) {
     // Filter by name only
     const filteredSalesmen = useMemo(() => {
         if (!searchTerm.trim()) return salesmen;
-
         const term = searchTerm.toLowerCase().trim();
-
         return salesmen.filter(s =>
             s.fullname?.toLowerCase().includes(term)
         );
@@ -616,13 +671,54 @@ export default function SalesmanDetails({ cacheKey }) {
                 </div>
             )}
 
+            {/* Crop Modal */}
+            {cropState.open && (
+                <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ height: '80vh' }}>
+                        <div className="px-6 py-4 border-b flex justify-between items-center">
+                            <h3 className="text-lg font-semibold">Crop Image - {cropState.field}</h3>
+                            <button onClick={() => setCropState({ open: false, field: null, image: null })} className="text-gray-500 hover:text-gray-700 text-2xl leading-none cursor-pointer">&times;</button>
+                        </div>
+                        <div className="relative flex-1 bg-gray-900">
+                            <Cropper
+                                image={cropState.image}
+                                crop={crop}
+                                zoom={zoom}
+                                aspect={cropState.field === 'idproof' ? 4 / 3 : 1}
+                                onCropChange={setCrop}
+                                onCropComplete={onCropComplete}
+                                onZoomChange={setZoom}
+                                objectFit="contain"
+                            />
+                        </div>
+                        <div className="px-6 py-4 border-t bg-gray-50">
+                            <div className="mb-3">
+                                <label className="text-xs text-gray-500 block mb-1">Zoom</label>
+                                <input
+                                    type="range"
+                                    value={zoom}
+                                    min={1}
+                                    max={3}
+                                    step={0.1}
+                                    onChange={(e) => setZoom(Number(e.target.value))}
+                                    className="w-full"
+                                />
+                            </div>
+                            <div className="flex justify-end gap-3">
+                                <button onClick={() => setCropState({ open: false, field: null, image: null })} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer">Cancel</button>
+                                <button onClick={handleCropSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer">Crop & Save</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="mb-8">
                 <div className="flex justify-between items-center mb-4">
                     <div>
                         <h2 className="text-2xl font-semibold text-gray-900">Salesman Details</h2>
                         <p className="text-sm text-gray-500 mt-1">Manage and view all salesman information</p>
                     </div>
-                    {/* Move search bar here, before Add Salesman button */}
                     <div className="flex items-center gap-3">
                         <div className="relative">
                             <input
@@ -657,7 +753,6 @@ export default function SalesmanDetails({ cacheKey }) {
                         </button>
                     </div>
                 </div>
-
             </div>
 
             {renderSalesmanCards()}
