@@ -464,9 +464,43 @@ export default function CompanyProductManagement({ cacheKey }) {
                     </select>
                   </div>
                   <div><input type="text" value={entry.Type} onChange={(e) => handleEntryChange(index, 'Type', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Type" /></div>
-                  <div><input type="number" value={entry.OrderedQty} onChange={(e) => handleEntryChange(index, 'OrderedQty', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Qty" min="0" /></div>
-                  <div><input type="number" value={entry.OrderedAmount} readOnly className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50" step="0.01" /></div>
-                  <div><input type="number" value={entry.DeliveredQty} onChange={(e) => handleEntryChange(index, 'DeliveredQty', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Qty" min="0" /></div>
+                  <div>
+                    <input
+                      type="number"
+                      value={entry.OrderedQty}
+                      onChange={(e) => handleEntryChange(index, 'OrderedQty', e.target.value)}
+                      onKeyDown={(e) => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                      onWheel={(e) => e.target.blur()}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      placeholder="Qty"
+                      min="0"
+                    />
+                  </div>
+
+                  <div>
+                    <input
+                      type="number"
+                      value={entry.OrderedAmount}
+                      readOnly
+                      onKeyDown={(e) => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                      onWheel={(e) => e.target.blur()}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      step="0.01"
+                    />
+                  </div>
+
+                  <div>
+                    <input
+                      type="number"
+                      value={entry.DeliveredQty}
+                      onChange={(e) => handleEntryChange(index, 'DeliveredQty', e.target.value)}
+                      onKeyDown={(e) => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                      onWheel={(e) => e.target.blur()}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      placeholder="Qty"
+                      min="0"
+                    />
+                  </div>
                   <div className="flex items-center gap-2">
                     <input type="number" value={entry.DeliveredAmount} readOnly className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50" step="0.01" />
                     <button onClick={() => removeEntryRow(index)} className="px-2 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm cursor-pointer">
@@ -475,10 +509,10 @@ export default function CompanyProductManagement({ cacheKey }) {
                   </div>
                 </div>
               ))}
-              <button onClick={addEntryRow} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm cursor-pointer">+ Add More Product</button>
             </div>
           </div>
           <div className="border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
+            <button onClick={addEntryRow} className="px-4 py-2 mr-auto bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm cursor-pointer">+ Add More Product</button>
             <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors cursor-pointer">Cancel</button>
             <button onClick={handleSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer">{isEditMode ? 'Update Product' : 'Submit Product'}</button>
           </div>

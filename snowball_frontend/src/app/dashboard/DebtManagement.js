@@ -14,6 +14,7 @@ export default function DebtManagement({ cacheKey }) {
   const [viewMode, setViewMode] = useState('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedDebts, setSelectedDebts] = useState(new Set()); // 👈 NEW: Track selected debts for bulk delete
   const [formData, setFormData] = useState({
     debtid: '',
     type: 'give',
@@ -22,7 +23,7 @@ export default function DebtManagement({ cacheKey }) {
     note: ''
   });
   const [salesmanDebtSummary, setSalesmanDebtSummary] = useState(cachedData?.salesmanDebtSummary || {});
-  const [searchTerm, setSearchTerm] = useState(''); // 👈 NEW
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Toast & Confirmation popup states
   const [toastMessage, setToastMessage] = useState('');
@@ -133,6 +134,7 @@ export default function DebtManagement({ cacheKey }) {
       const result = await postData('debt/retrieve-debts', { salesmanid });
       if (result?.status) {
         setDebts(result.data);
+        setSelectedDebts(new Set()); // Reset selections when changing salesman
       }
     } catch (error) {
       console.error('Error fetching debts:', error);
@@ -170,6 +172,7 @@ export default function DebtManagement({ cacheKey }) {
     setViewMode('list');
     setSelectedSalesman(null);
     setDebts([]);
+    setSelectedDebts(new Set());
     fetchAllSalesmenDebtSummary();
   }, [salesmen]);
 
@@ -268,6 +271,65 @@ export default function DebtManagement({ cacheKey }) {
   const handleDelete = useCallback((debtid) => {
     showConfirm('Are you sure you want to delete this debt record?', () => performDelete(debtid));
   }, [showConfirm, performDelete]);
+
+  // 👈 NEW: Bulk delete function
+  const performBulkDelete = useCallback(async () => {
+    const debtidsArray = Array.from(selectedDebts);
+    if (debtidsArray.length === 0) {
+      showToast('Please select at least one debt record to delete');
+      return;
+    }
+    
+    try {
+      const result = await postData('debt/delete-debts-bulk', { debtids: debtidsArray });
+      if (result?.status) {
+        clearCache(cacheKey);
+        showToast(`${result.deletedCount} debt record(s) deleted successfully!`);
+        setSelectedDebts(new Set());
+        fetchSalesmanDebts(selectedSalesman.salesmanid);
+        fetchAllSalesmenDebtSummary();
+      } else {
+        showToast(result?.message || 'Failed to delete records');
+      }
+    } catch (error) {
+      console.error('Error bulk deleting debts:', error);
+      showToast('Error deleting debt records');
+    }
+  }, [selectedDebts, selectedSalesman, fetchSalesmanDebts, showToast]);
+
+  // 👈 NEW: Handle checkbox selection
+  const handleCheckboxChange = useCallback((debtid) => {
+    setSelectedDebts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(debtid)) {
+        newSet.delete(debtid);
+      } else {
+        newSet.add(debtid);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // 👈 NEW: Handle select all
+  const handleSelectAll = useCallback(() => {
+    if (selectedDebts.size === debts.length) {
+      setSelectedDebts(new Set());
+    } else {
+      setSelectedDebts(new Set(debts.map(debt => debt.debtid)));
+    }
+  }, [selectedDebts, debts]);
+
+  // 👈 NEW: Handle bulk delete confirmation
+  const handleBulkDelete = useCallback(() => {
+    if (selectedDebts.size === 0) {
+      showToast('Please select at least one record to delete');
+      return;
+    }
+    showConfirm(
+      `Are you sure you want to delete ${selectedDebts.size} debt record(s)? This action cannot be undone.`,
+      performBulkDelete
+    );
+  }, [selectedDebts, showConfirm, performBulkDelete]);
 
   // ----- RENDER FUNCTIONS -----
 
@@ -559,64 +621,105 @@ export default function DebtManagement({ cacheKey }) {
             <p className="text-gray-500">No debt records found for this salesman</p>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">S.No</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Note</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {debts.map((debt, index) => (
-                    <tr key={debt.debtid} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{debt.debt_date}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${debt.type === 'give'
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-green-100 text-green-700'
-                          }`}>
-                          {debt.type === 'give' ? 'Given' : 'Received'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                        <span className={debt.type === 'give' ? 'text-red-600' : 'text-green-600'}>
-                          ₹{parseFloat(debt.amount).toFixed(2)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                        <span className="text-gray-400 text-xs ml-2 truncate block max-w-[150px]" title={debt.note}>
-                          {debt.note?.length > 20 ? debt.note?.substring(0, 20) + '...' : debt.note}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEditClick(debt)}
-                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors cursor-pointer"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(debt.debtid)}
-                            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg transition-colors cursor-pointer"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
+          <>
+            {/* 👈 NEW: Bulk Delete Toolbar */}
+            {selectedDebts.size > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex items-center justify-between">
+                <span className="text-sm font-medium text-blue-700">
+                  {selectedDebts.size} record(s) selected
+                </span>
+                <button
+                  onClick={handleBulkDelete}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete Selected
+                </button>
+              </div>
+            )}
+
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {/* 👈 NEW: Checkbox column */}
+                      <th className="px-4 py-3 text-center w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedDebts.size === debts.length && debts.length > 0}
+                          onChange={handleSelectAll}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">S.No</th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Type</th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Note</th>
+                      <th className="px-6 py-3 text-left text-xs font-bold text-black uppercase tracking-wider">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {debts.map((debt, index) => (
+                      <tr 
+                        key={debt.debtid} 
+                        className={`hover:bg-gray-50 transition-colors ${selectedDebts.has(debt.debtid) ? 'bg-blue-50' : ''}`}
+                      >
+                        {/* 👈 NEW: Checkbox cell */}
+                        <td className="px-4 py-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedDebts.has(debt.debtid)}
+                            onChange={() => handleCheckboxChange(debt.debtid)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{debt.debt_date}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${debt.type === 'give'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-green-100 text-green-700'
+                            }`}>
+                            {debt.type === 'give' ? 'Given' : 'Received'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
+                          <span className={debt.type === 'give' ? 'text-red-600' : 'text-green-600'}>
+                            ₹{parseFloat(debt.amount).toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">
+                          <span className="text-gray-400 text-xs ml-2 truncate block max-w-[150px]" title={debt.note}>
+                            {debt.note?.length > 20 ? debt.note?.substring(0, 20) + '...' : debt.note}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditClick(debt)}
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(debt.debtid)}
+                              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg transition-colors cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     );

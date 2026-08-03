@@ -236,4 +236,69 @@ router.post("/delete-debt", rateLimiter.critical(), (req, res) => {
     }
 });
 
+// ==================== 5. BULK DELETE DEBTS ====================
+router.post("/delete-debts-bulk", rateLimiter.critical(), (req, res) => {
+    try {
+        const { debtids } = req.body;
+
+        if (!debtids || !Array.isArray(debtids) || debtids.length === 0) {
+            return res.status(400).json({ 
+                status: false, 
+                message: "Please provide an array of debt IDs to delete" 
+            });
+        }
+
+        // Get all debt records before deletion for response data
+        const placeholders = debtids.map(() => '?').join(',');
+        
+        pool.query(
+            `SELECT d.debtid, d.salesmanid, s.fullname AS salesman_name, 
+                    d.type, DATE_FORMAT(d.debt_date, '%Y-%m-%d') AS debt_date, 
+                    d.amount, d.note
+             FROM salesman_debt d
+             LEFT JOIN salesman s ON d.salesmanid = s.salesmanid
+             WHERE d.debtid IN (${placeholders})`,
+            debtids,
+            (err, fetchResult) => {
+                if (err) {
+                    console.error(err);
+                    return res.status(500).json({ status: false, message: "Database Error" });
+                }
+                
+                if (fetchResult.length === 0) {
+                    return res.status(404).json({ 
+                        status: false, 
+                        message: "No debt records found with the provided IDs" 
+                    });
+                }
+
+                // Delete all records in a single query
+                pool.query(
+                    `DELETE FROM salesman_debt WHERE debtid IN (${placeholders})`,
+                    debtids,
+                    (error, deleteResult) => {
+                        if (error) {
+                            console.error(error);
+                            return res.status(500).json({ 
+                                status: false, 
+                                message: "Database Error" 
+                            });
+                        }
+                        
+                        return res.status(200).json({
+                            status: true,
+                            message: `${deleteResult.affectedRows} debt record(s) deleted successfully`,
+                            deletedCount: deleteResult.affectedRows,
+                            data: fetchResult
+                        });
+                    }
+                );
+            }
+        );
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ status: false, message: "Technical Issue" });
+    }
+});
+
 module.exports = router;
